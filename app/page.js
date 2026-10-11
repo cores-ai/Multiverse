@@ -992,21 +992,6 @@ export default function OwnerManagementDashboard() {
           </nav>
         </div>
 
-        {/* Sidebar Footer Status */}
-        <div className="sidebar-footer">
-          <div className="footer-status-row">
-            <div className="status-dot-ping">
-              <span className="status-beacon-pulse"></span>
-              <span>CLUSTER ONLINE</span>
-            </div>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--accent-cyan)' }}>
-              {pingStatus.latency}ms
-            </span>
-          </div>
-          <div className="footer-subtext">
-            Direct API Gateway &bull; JIT Engine Ready
-          </div>
-        </div>
       </aside>
 
       {/* ========================================================
