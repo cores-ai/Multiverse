@@ -353,3 +353,95 @@ export async function POST(request) {
         return NextResponse.json({ success: false, error: e.message }, { status: 500 });
     }
 }
+
+
+export async function DELETE(request) {
+    try {
+        const { searchParams } = new URL(request.url);
+        let repoName = searchParams.get('repoName') || searchParams.get('repoId');
+
+        if (!repoName) {
+            try {
+                const body = await request.json();
+                repoName = body.repoName || body.repoId;
+            } catch (e) {}
+        }
+
+        if (!repoName) {
+            return NextResponse.json({ success: false, error: 'repoName is required' }, { status: 400 });
+        }
+
+        let cleanRepoName = String(repoName || '')
+            .trim()
+            .toLowerCase()
+            .replace(/\.[^/.]+$/, '')
+            .replace(/-(main|master|dev|latest)$/i, '')
+            .replace(/[^a-z0-9-]/g, '-')
+            .replace(/-+/g, '-');
+
+        let githubDeleted = false;
+        let githubMessage = '';
+
+        // 1. Delete from GitHub via Octokit (using delete_repo permission)
+        try {
+            let token = await getRemoteConfig('GITHUB_TOKEN');
+            if (!token || token.trim() === '') token = process.env.GITHUB_TOKEN;
+            if (token && !token.includes('your_github_personal_access_token')) {
+                const octokit = new Octokit({ auth: token.trim() });
+                const { data: user } = await octokit.users.getAuthenticated();
+                const owner = user.login;
+
+                try {
+                    await octokit.repos.delete({
+                        owner,
+                        repo: cleanRepoName
+                    });
+                    githubDeleted = true;
+                    githubMessage = `Successfully deleted GitHub repository ${owner}/${cleanRepoName}`;
+                    console.log(`[GitHub API] Deleted repo ${owner}/${cleanRepoName}`);
+                } catch (ghErr) {
+                    if (ghErr.status === 404) {
+                        githubDeleted = true;
+                        githubMessage = `Repository ${cleanRepoName} did not exist on GitHub (already clean).`;
+                    } else if (ghErr.status === 403) {
+                        githubMessage = `GitHub 403 Forbidden: Check delete_repo scope for ${owner}/${cleanRepoName}.`;
+                        console.warn('[GitHub Delete 403]:', ghErr.message);
+                    } else {
+                        githubMessage = `GitHub Notice: ${ghErr.message}`;
+                        console.warn('[GitHub Delete Warning]:', ghErr.message);
+                    }
+                }
+            }
+        } catch (authErr) {
+            console.warn('[GitHub Auth Warning during delete]:', authErr.message);
+        }
+
+        // 2. Clean up Cloudflare D1 tables
+        try {
+            const repoRow = await queryD1('SELECT account_id FROM repo_deployments WHERE repo_name = ? LIMIT 1;', [cleanRepoName]).catch(() => []);
+            if (Array.isArray(repoRow) && repoRow.length > 0 && repoRow[0].account_id) {
+                await queryD1('UPDATE railway_accounts SET repos_count = MAX(0, repos_count - 1) WHERE account_id = ?;', [repoRow[0].account_id]).catch(() => {});
+            }
+
+            await queryD1('DELETE FROM repo_deployments WHERE repo_name = ?;', [cleanRepoName]);
+            await queryD1('DELETE FROM repo_envs WHERE repo_name = ?;', [cleanRepoName]);
+            await queryD1('DELETE FROM database_accounts WHERE cluster_name = ? OR db_name = ? OR db_id = ?;', [cleanRepoName, `${cleanRepoName}_db`, `db_${cleanRepoName}`]);
+        } catch (d1Err) {
+            console.error('[D1 Delete Purge Error]:', d1Err.message);
+        }
+
+        return NextResponse.json({
+            success: true,
+            repoName: cleanRepoName,
+            githubDeleted,
+            message: githubMessage || `Repository ${cleanRepoName} removed completely from GitHub and Cloudflare D1.`
+        });
+    } catch (e) {
+        console.error('API /api/repos DELETE Error:', e);
+        return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    }
+}
+
+
+
+
