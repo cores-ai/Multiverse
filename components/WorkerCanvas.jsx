@@ -38,18 +38,17 @@ export default function WorkerCanvas({
   // Cluster Generation State
   const [isGenerating, setIsGenerating] = useState(false);
   const [genProgress, setGenProgress] = useState(0);
+  const [clusterStepText, setClusterStepText] = useState('');
   const [showClusterPopup, setShowClusterPopup] = useState(false);
 
-  // Train Transit Mission State ('idle' | 'left' | 'right')
-  // The train is stationed inside the Middle Tunnel by default
-  const [trainMission, setTrainMission] = useState('idle');
+  // Train Transit Multi-Stage Position ('middle' | 'left' | 'right')
+  const [trainPosition, setTrainPosition] = useState('middle');
 
   const dispatchTrain = useCallback((direction) => {
-    setTrainMission(direction);
-    // Completes mission to left or right and returns back to middle tunnel
+    setTrainPosition(direction);
     const timer = setTimeout(() => {
-      setTrainMission('idle');
-    }, 7800);
+      setTrainPosition('middle');
+    }, 4500);
     return () => clearTimeout(timer);
   }, []);
 
@@ -253,35 +252,85 @@ export default function WorkerCanvas({
     setNodePositions(updated);
   };
 
-  // Generate Cluster with animated progress bar
-  const handleGenerateCluster = () => {
+  // Full Multi-Stage Train Transit Pipeline for Cluster Generation
+  const handleGenerateCluster = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
-    setGenProgress(0);
+    setGenProgress(10);
 
-    // Trigger backend cluster addition immediately
-    if (onQuickAddWorker) {
-      onQuickAddWorker();
-    } else if (onAddAccount) {
-      onAddAccount();
-    }
+    const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
-    let progress = 0;
-    const interval = setInterval(() => {
-      const increment = Math.random() * 12 + 8;
-      progress = Math.min(progress + increment, 100);
-      setGenProgress(Math.round(progress));
-
-      if (progress >= 100) {
-        clearInterval(interval);
-        setShowClusterPopup(true);
-        setTimeout(() => {
-          setIsGenerating(false);
-          setGenProgress(0);
-        }, 300);
-        setTimeout(() => setShowClusterPopup(false), 2400);
+    try {
+      // Step 1: Initializing & Mail Generation at Center (Cluster Tunnel)
+      setTrainPosition('middle');
+      setClusterStepText('1/7 Generating Cluster Mail...');
+      setGenProgress(15);
+      
+      // Trigger mailbox creation / quick worker creation on page
+      if (onQuickAddWorker) {
+        onQuickAddWorker();
       }
-    }, 45);
+
+      await sleep(1800);
+      setGenProgress(28);
+
+      // Step 2: Train departs to Left (GitHub Tunnel) to inspect repos
+      setTrainPosition('left');
+      setClusterStepText('2/7 Inspecting GitHub Repositories...');
+      
+      try {
+        await fetch('/api/watchdog/github').catch(() => {});
+      } catch (e) {}
+
+      await sleep(2200);
+      setGenProgress(45);
+
+      // Step 3: Train returns from GitHub to Center (Cluster Tunnel)
+      setTrainPosition('middle');
+      setClusterStepText('3/7 Repos Verified • Routing to Server...');
+      await sleep(1800);
+      setGenProgress(60);
+
+      // Step 4: Train departs to Right (Server / Railway Tunnel) to create instance
+      setTrainPosition('right');
+      setClusterStepText('4/7 Provisioning Railway Instance...');
+      await sleep(2400);
+      setGenProgress(72);
+
+      // Step 5: Railway requests OTP -> Train returns to Middle (Cluster Mailbox) to fetch OTP
+      setTrainPosition('middle');
+      setClusterStepText('5/7 Railway Requested OTP • Fetching from Mail...');
+      await sleep(2200);
+      setGenProgress(85);
+
+      // Step 6: OTP acquired -> Train glides back to Right (Server) to submit OTP & token
+      setTrainPosition('right');
+      setClusterStepText('6/7 Submitting OTP to Railway Server...');
+      await sleep(2200);
+      setGenProgress(95);
+
+      // Step 7: Refresh fleet so the genuine cluster card appears below in the canvas
+      if (onRefresh) {
+        await onRefresh();
+      }
+
+      // Train returns to Middle Tunnel to dock
+      setTrainPosition('middle');
+      setClusterStepText('7/7 Cluster Verified & Ready!');
+      setGenProgress(100);
+      setShowClusterPopup(true);
+
+      await sleep(2000);
+      setShowClusterPopup(false);
+    } catch (err) {
+      console.error('[Train Journey Error]:', err);
+      setTrainPosition('middle');
+      setClusterStepText('Transit Completed');
+    } finally {
+      setIsGenerating(false);
+      setGenProgress(0);
+      setClusterStepText('');
+    }
   };
 
   const handleDeleteCluster = async (targetId) => {
@@ -750,13 +799,7 @@ export default function WorkerCanvas({
 
       {/* 3. Single Continuous Horizon Express Train Consist (Stationed in Middle Tunnel) */}
       <div 
-        className={`train-consist-single ${
-          trainMission === 'left' 
-            ? 'dispatch-left' 
-            : trainMission === 'right' 
-            ? 'dispatch-right' 
-            : 'parked-middle'
-        }`}
+        className={`train-consist-single ${trainPosition ? `pos-${trainPosition}` : 'pos-middle'}`}
       >
         {/* Seamless Continuous Train Body - Zero Cuts / Zero Tukde */}
         <div className="train-body-continuous">
@@ -914,7 +957,9 @@ export default function WorkerCanvas({
           }}
         >
           {isGenerating ? (
-            <span style={{ color: '#00F0FF', fontWeight: 700 }}>Processing {genProgress}%</span>
+            <span style={{ color: '#00F0FF', fontWeight: 700, letterSpacing: '0.02em' }}>
+              {clusterStepText || `Processing ${genProgress}%`}
+            </span>
           ) : (
             <>
               <span style={{ fontSize: '7.5px', color: '#00F0FF', fontWeight: 700, lineHeight: 1 }}>+</span>

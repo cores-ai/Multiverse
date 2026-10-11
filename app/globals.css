@@ -3016,17 +3016,15 @@ button { font-family: inherit; }
 }
 
 /* ========================================================
-   HORIZON RAILWAY CONTINUOUS THROUGH-TUNNEL TRANSIT
-   Train enters Left Arch, travels INSIDE mountain rock, emerges Right Arch
-/* ========================================================
    HORIZON RAILWAY: TRAIN PARKED IN MIDDLE TUNNEL BY DEFAULT
    Dispatches on-demand to Left (GitHub) or Right (Railway) tunnels
    ======================================================== */
 
 /* Single Unified Horizon Express Train Consist (Stationed inside Middle Tunnel) */
+/* Smooth Horizon Express Multi-Stage Journey Positions */
 .train-consist-single {
   position: absolute;
-  top: 17.2px;
+  top: 13px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -3036,86 +3034,24 @@ button { font-family: inherit; }
   pointer-events: none;
   will-change: transform;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.7));
-  transition: transform 0.3s ease;
+  transition: transform 1.35s cubic-bezier(0.38, 0, 0.22, 1);
+}
+
+.train-consist-single.pos-middle {
+  transform: translateX(-50%) !important;
+}
+
+.train-consist-single.pos-left {
+  transform: translateX(calc(-50vw + 26px)) !important;
+}
+
+.train-consist-single.pos-right {
+  transform: translateX(calc(50vw - 26px)) !important;
 }
 
 /* Idle State: Quietly parked inside the Center Mountain Tunnel */
 .train-consist-single.parked-middle {
   transform: translateX(-50%);
-  animation: none !important;
-}
-
-/* Mission to Left: Dispatches from Middle Tunnel to Left (GitHub API) Tunnel and returns */
-@keyframes trainDispatchToLeftTunnel {
-  0% {
-    /* Stationed securely inside Middle Tunnel */
-    transform: translateX(-50%);
-  }
-  15% {
-    /* Emerges leftwards out of western arch into daylight */
-    transform: translateX(calc(-50% - 70px));
-  }
-  42% {
-    /* Glides across western track at high speed */
-    transform: translateX(calc(-50vw + 38px));
-  }
-  50% {
-    /* Enters and docks inside Left Mountain Tunnel (GitHub Tunnel) */
-    transform: translateX(calc(-50vw - 10px));
-  }
-  75% {
-    /* Stationed inside Left Tunnel delivering API payload */
-    transform: translateX(calc(-50vw - 10px));
-  }
-  85% {
-    /* Glides back eastwards across track */
-    transform: translateX(calc(-50% - 60px));
-  }
-  100% {
-    /* Returns smoothly and docks back inside Middle Tunnel */
-    transform: translateX(-50%);
-  }
-}
-
-/* Mission to Right: Dispatches from Middle Tunnel to Right (Railway Server) Tunnel and returns */
-@keyframes trainDispatchToRightTunnel {
-  0% {
-    /* Stationed securely inside Middle Tunnel */
-    transform: translateX(-50%);
-  }
-  15% {
-    /* Emerges rightwards out of eastern arch into daylight */
-    transform: translateX(calc(-50% + 70px));
-  }
-  42% {
-    /* Glides across eastern track at high speed */
-    transform: translateX(calc(50vw - 110px));
-  }
-  50% {
-    /* Enters and docks inside Right Mountain Tunnel (Railway Tunnel) */
-    transform: translateX(calc(50vw - 36px));
-  }
-  75% {
-    /* Stationed inside Right Tunnel harvesting token / provisioning server */
-    transform: translateX(calc(50vw - 36px));
-  }
-  85% {
-    /* Glides back westwards across track */
-    transform: translateX(calc(-50% + 60px));
-  }
-  100% {
-    /* Returns smoothly and docks back inside Middle Tunnel */
-    transform: translateX(-50%);
-  }
-}
-
-/* Active Mission Classes */
-.train-consist-single.dispatch-left {
-  animation: trainDispatchToLeftTunnel 7.5s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
-}
-
-.train-consist-single.dispatch-right {
-  animation: trainDispatchToRightTunnel 7.5s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
 }
 
 /* Seamless Continuous Train Body - Zero cuts, zero tukde */
