@@ -852,8 +852,7 @@ export default function WorkerCanvas({
             textShadow: '0 1px 3px rgba(0, 0, 0, 0.95)'
           }}
         >
-          <span style={{ fontSize: '7.5px', color: '#00F0FF', fontWeight: 700, lineHeight: 1 }}>+</span>
-          <span>github api</span>
+          <span>Github</span>
         </div>
       </div>
 
@@ -979,8 +978,7 @@ export default function WorkerCanvas({
             textShadow: '0 1px 3px rgba(0, 0, 0, 0.95)'
           }}
         >
-          <span style={{ fontSize: '7.5px', color: '#00F0FF', fontWeight: 700, lineHeight: 1 }}>+</span>
-          <span>Railway server</span>
+          <span>Server</span>
         </div>
       </div>
       </div>
