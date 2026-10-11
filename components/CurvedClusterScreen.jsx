@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Copy, Check, RefreshCw, Key, ShieldCheck, Grid, Plus, Minus, UploadCloud } from 'lucide-react';
@@ -37,21 +37,8 @@ export default function CurvedClusterScreen({
     return null;
   }, [latestCluster, accounts]);
 
-  // If no cluster is active yet, auto-provision a real disposable inbox so user has a live mailbox ready
-  useEffect(() => {
-    if (!currentAccount && !autoInbox) {
-      fetch('/api/tempmail')
-        .then(r => r.json())
-        .then(d => {
-          if (d && d.success && d.inbox) {
-            setAutoInbox(d.inbox);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [currentAccount, autoInbox]);
-
-  const clusterEmail = currentAccount?.email || currentAccount?.clusterName || currentAccount?.repoName || autoInbox || '';
+  // Temp mail is only displayed when a cluster is actually being provisioned / active
+  const clusterEmail = currentAccount?.email || currentAccount?.clusterName || '';
 
   // Auto-poll OTP directly in real-time whenever an active cluster email is present
   useEffect(() => {
@@ -163,7 +150,7 @@ export default function CurvedClusterScreen({
           {/* Row 1: new cluster: */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontFamily: 'var(--font-mono, monospace)', lineHeight: 1.2 }}>
             <span style={{ color: '#94A3B8', fontWeight: 600, letterSpacing: '0.02em' }}>new cluster:</span>
-            <span style={{ color: '#00F0FF', fontWeight: 700, letterSpacing: '0.03em' }}>{clusterEmail || 'INITIALIZING INBOX...'}</span>
+            <span style={{ color: '#00F0FF', fontWeight: 700, letterSpacing: '0.03em' }}>{clusterEmail || 'AWAITING CLUSTER INITIATION'}</span>
             <button
               onClick={handleCopyCluster}
               title="Copy Cluster Identifier"
@@ -184,7 +171,9 @@ export default function CurvedClusterScreen({
           {/* Row 2: cluster otp: */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontFamily: 'var(--font-mono, monospace)', lineHeight: 1.2 }}>
             <span style={{ color: '#94A3B8', fontWeight: 600, letterSpacing: '0.02em' }}>cluster otp:</span>
-            {otp && otp !== 'NO OTP RECEIVED' ? (
+            {!clusterEmail ? (
+              <span style={{ color: '#475569', fontWeight: 600, letterSpacing: '0.03em' }}>STANDBY</span>
+            ) : otp && otp !== 'NO OTP RECEIVED' ? (
               <span 
                 style={{ 
                   color: '#10B981', 
@@ -453,3 +442,5 @@ export default function CurvedClusterScreen({
     </div>
   );
 }
+
+

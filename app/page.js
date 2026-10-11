@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { 
@@ -1186,7 +1186,6 @@ export default function OwnerManagementDashboard() {
             >
               <span className="health-title">Health</span>
               <span className="health-pct">{healthPercentage}%</span>
-              <span className="health-emoji">{healthEmoji}</span>
             </div>
           </div>
         </header>
@@ -1217,6 +1216,7 @@ export default function OwnerManagementDashboard() {
             />
 
             <WorkerCanvas
+              pipelineTrigger={pipelineTrigger}
               mode="server"
               accounts={accounts}
               repos={repos}
@@ -2672,6 +2672,7 @@ export default function OwnerManagementDashboard() {
     </div>
   );
 }
+
 
 
 
