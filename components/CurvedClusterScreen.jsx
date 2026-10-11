@@ -25,6 +25,7 @@ export default function CurvedClusterScreen({
   const [isPolling, setIsPolling] = useState(false);
   const [copiedOtp, setCopiedOtp] = useState(false);
   const [copiedCluster, setCopiedCluster] = useState(false);
+  const [autoInbox, setAutoInbox] = useState(null);
 
   // Derive most active/recent cluster
   const currentAccount = useMemo(() => {
@@ -36,9 +37,23 @@ export default function CurvedClusterScreen({
     return null;
   }, [latestCluster, accounts]);
 
-  const clusterEmail = currentAccount?.email || currentAccount?.clusterName || currentAccount?.repoName || '';
+  // If no cluster is active yet, auto-provision a real disposable inbox so user has a live mailbox ready
+  useEffect(() => {
+    if (!currentAccount && !autoInbox) {
+      fetch('/api/tempmail')
+        .then(r => r.json())
+        .then(d => {
+          if (d && d.success && d.inbox) {
+            setAutoInbox(d.inbox);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentAccount, autoInbox]);
 
-  // Auto-poll OTP directly whenever a new cluster email is active
+  const clusterEmail = currentAccount?.email || currentAccount?.clusterName || currentAccount?.repoName || autoInbox || '';
+
+  // Auto-poll OTP directly in real-time whenever an active cluster email is present
   useEffect(() => {
     if (!clusterEmail) return;
     setOtp(null);
@@ -46,23 +61,24 @@ export default function CurvedClusterScreen({
 
     const poll = async () => {
       try {
-        const res = await fetch(`/api/tempmail?inbox=${encodeURIComponent(clusterEmail)}&timeout=8`);
+        const res = await fetch(`/api/tempmail?inbox=${encodeURIComponent(clusterEmail)}&timeout=3`);
         const data = await res.json();
         if (!isCancelled && data && data.success && data.otp) {
           setOtp(data.otp);
           return true;
         }
       } catch (err) {
-        // silent retry
+        // silent retry in background
       }
       return false;
     };
 
     poll();
     const interval = setInterval(async () => {
+      if (isCancelled) return;
       const found = await poll();
       if (found) clearInterval(interval);
-    }, 6000);
+    }, 2500);
 
     return () => {
       isCancelled = true;
@@ -76,7 +92,7 @@ export default function CurvedClusterScreen({
     if (!clusterEmail) return;
     setIsPolling(true);
     try {
-      const res = await fetch(`/api/tempmail?inbox=${encodeURIComponent(clusterEmail)}&timeout=15`);
+      const res = await fetch(`/api/tempmail?inbox=${encodeURIComponent(clusterEmail)}&timeout=8`);
       const data = await res.json();
       if (data && data.success && data.otp) {
         setOtp(data.otp);
@@ -84,7 +100,7 @@ export default function CurvedClusterScreen({
         setOtp(prev => prev || 'NO OTP RECEIVED');
         setTimeout(() => {
           if (!otp) setOtp(null);
-        }, 4000);
+        }, 3000);
       }
     } catch (err) {
       console.warn('OTP fetch error:', err);
@@ -147,7 +163,7 @@ export default function CurvedClusterScreen({
           {/* Row 1: new cluster: */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontFamily: 'var(--font-mono, monospace)', lineHeight: 1.2 }}>
             <span style={{ color: '#94A3B8', fontWeight: 600, letterSpacing: '0.02em' }}>new cluster:</span>
-            <span style={{ color: '#00F0FF', fontWeight: 700, letterSpacing: '0.03em' }}>{clusterEmail || 'WAITING FOR CLUSTER...'}</span>
+            <span style={{ color: '#00F0FF', fontWeight: 700, letterSpacing: '0.03em' }}>{clusterEmail || 'INITIALIZING INBOX...'}</span>
             <button
               onClick={handleCopyCluster}
               title="Copy Cluster Identifier"
@@ -168,15 +184,64 @@ export default function CurvedClusterScreen({
           {/* Row 2: cluster otp: */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontFamily: 'var(--font-mono, monospace)', lineHeight: 1.2 }}>
             <span style={{ color: '#94A3B8', fontWeight: 600, letterSpacing: '0.02em' }}>cluster otp:</span>
-            <span 
-              style={{ 
-                color: otp && otp !== 'NO OTP RECEIVED' ? '#10B981' : '#F59E0B', 
-                fontWeight: 700,
-                letterSpacing: '0.04em'
+            {otp && otp !== 'NO OTP RECEIVED' ? (
+              <span 
+                style={{ 
+                  color: '#10B981', 
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                  fontWeight: 800,
+                  letterSpacing: '0.08em',
+                  boxShadow: '0 0 10px rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                {otp}
+              </span>
+            ) : (
+              <span 
+                style={{ 
+                  color: '#F59E0B', 
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <span 
+                  style={{ 
+                    width: '5px', 
+                    height: '5px', 
+                    borderRadius: '50%', 
+                    background: '#F59E0B', 
+                    boxShadow: '0 0 6px #F59E0B', 
+                    display: 'inline-block' 
+                  }} 
+                />
+                WAITING...
+              </span>
+            )}
+
+            {/* Quick Poll / Recheck Button */}
+            <button
+              onClick={handlePollOtp}
+              title="Poll OTP directly"
+              disabled={isPolling}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: isPolling ? '#00F0FF' : '#64748B',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '0 2px'
               }}
             >
-              {otp || 'WAITING...'}
-            </span>
+              <RefreshCw size={11} className={isPolling ? 'animate-spin' : ''} />
+            </button>
+
             {otp && otp !== 'NO OTP RECEIVED' && (
               <button
                 onClick={handleCopyOtp}
@@ -303,7 +368,6 @@ export default function CurvedClusterScreen({
 
         {/* RIGHT ACTIONS: Grid Toggle, Zoom In (+), Zoom Out (-) */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          {/* 3 Buttons: Grid Toggle, Zoom In (+), Zoom Out (-) */}
           <div 
             style={{
               display: 'inline-flex',

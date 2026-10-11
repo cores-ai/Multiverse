@@ -46,8 +46,10 @@ export default function WorkerCanvas({
 
   // Train Transit Multi-Stage Position ('middle' | 'left' | 'right')
   const [trainPosition, setTrainPosition] = useState('middle');
+  const [trainTransition, setTrainTransition] = useState('transform 1.8s cubic-bezier(0.35, 0, 0.25, 1)');
 
-  const dispatchTrain = useCallback((direction) => {
+  const dispatchTrain = useCallback((direction, customTransition = 'transform 1.8s cubic-bezier(0.35, 0, 0.25, 1)') => {
+    setTrainTransition(customTransition);
     setTrainPosition(direction);
     const timer = setTimeout(() => {
       setTrainPosition('middle');
@@ -62,9 +64,11 @@ export default function WorkerCanvas({
     const curAccs = (accounts || []).length;
     const curRepos = (repos || []).length;
     if (curRepos > prev.repos) {
-      dispatchTrain('left');
+      setTrainTransition('transform 2.0s cubic-bezier(0.35, 0, 0.25, 1)');
+      dispatchTrain('left', 'transform 2.0s cubic-bezier(0.35, 0, 0.25, 1)');
     } else if (curAccs > prev.accs) {
-      dispatchTrain('right');
+      setTrainTransition('transform 2.0s cubic-bezier(0.35, 0, 0.25, 1)');
+      dispatchTrain('right', 'transform 2.0s cubic-bezier(0.35, 0, 0.25, 1)');
     }
     prevCountRef.current = { accs: curAccs, repos: curRepos };
   }, [accounts, repos, dispatchTrain]);
@@ -279,61 +283,54 @@ export default function WorkerCanvas({
 
     try {
       // Step 1: Initializing & Mail Generation at Center (Cluster Tunnel)
+      setTrainTransition('transform 1.6s cubic-bezier(0.25, 1, 0.5, 1)');
       setTrainPosition('middle');
-      setClusterStepText('1/7 Generating Cluster Mail...');
-      setGenProgress(15);
+      setClusterStepText('1/5 Initializing Cluster Mailbox...');
+      setGenProgress(20);
       
-      // Trigger mailbox creation / quick worker creation on page
       if (onQuickAddWorker) {
         onQuickAddWorker();
       }
 
-      await sleep(1800);
-      setGenProgress(28);
+      await sleep(1500);
+      setGenProgress(35);
 
-      // Step 2: Train departs to Left (GitHub Tunnel) to inspect repos
+      // Step 2: Train departs to Left (GitHub Tunnel) to link repository & config
+      setTrainTransition('transform 2.2s cubic-bezier(0.35, 0, 0.25, 1)');
       setTrainPosition('left');
-      setClusterStepText('2/7 Inspecting GitHub Repositories...');
-      
-      try {
-        await fetch('/api/watchdog/github').catch(() => {});
-      } catch (e) {}
-
-      await sleep(2200);
-      setGenProgress(45);
-
-      // Step 3: Train returns from GitHub to Center (Cluster Tunnel)
-      setTrainPosition('middle');
-      setClusterStepText('3/7 Repos Verified • Routing to Server...');
-      await sleep(1800);
-      setGenProgress(60);
-
-      // Step 4: Train departs to Right (Server / Railway Tunnel) to create instance
-      setTrainPosition('right');
-      setClusterStepText('4/7 Provisioning Railway Instance...');
+      setClusterStepText('2/5 Linking GitHub Repository & Preflight Scan...');
       await sleep(2400);
-      setGenProgress(72);
+      setGenProgress(55);
 
-      // Step 5: Railway requests OTP -> Train returns to Middle (Cluster Mailbox) to fetch OTP
+      // Step 3: Train glides across full track to Right (Server / Railway Tunnel)
+      setTrainTransition('transform 3.4s cubic-bezier(0.35, 0, 0.25, 1)');
+      setTrainPosition('right');
+      setClusterStepText('3/5 Routing to Railway Server Engine...');
+      await sleep(3600);
+      setGenProgress(70);
+
+      // Step 4: Railway requests OTP -> Train returns to Middle (Cluster Mailbox) to intercept OTP
+      setTrainTransition('transform 2.0s cubic-bezier(0.25, 1, 0.5, 1)');
       setTrainPosition('middle');
-      setClusterStepText('5/7 Railway Requested OTP • Fetching from Mail...');
-      await sleep(2200);
+      setClusterStepText('4/5 Railway Requested OTP • Intercepting Mail...');
+      await sleep(2400);
       setGenProgress(85);
 
-      // Step 6: OTP acquired -> Train glides back to Right (Server) to submit OTP & token
+      // Step 5: OTP acquired -> Train rushes to Right (Server) to submit OTP
+      setTrainTransition('transform 2.0s cubic-bezier(0.25, 1, 0.5, 1)');
       setTrainPosition('right');
-      setClusterStepText('6/7 Submitting OTP to Railway Server...');
+      setClusterStepText('5/5 Submitting OTP • Provisioning Instance...');
       await sleep(2200);
       setGenProgress(95);
 
-      // Step 7: Refresh fleet so the genuine cluster card appears below in the canvas
+      // Step 6: Fleet update & Docking at Center
       if (onRefresh) {
         await onRefresh();
       }
 
-      // Train returns to Middle Tunnel to dock
+      setTrainTransition('transform 2.0s cubic-bezier(0.25, 1, 0.5, 1)');
       setTrainPosition('middle');
-      setClusterStepText('7/7 Cluster Verified & Ready!');
+      setClusterStepText('Cluster Verified & Fleet Ready!');
       setGenProgress(100);
       setShowClusterPopup(true);
 
@@ -341,6 +338,7 @@ export default function WorkerCanvas({
       setShowClusterPopup(false);
     } catch (err) {
       console.error('[Train Journey Error]:', err);
+      setTrainTransition('transform 1.6s ease');
       setTrainPosition('middle');
       setClusterStepText('Transit Completed');
     } finally {
@@ -348,7 +346,7 @@ export default function WorkerCanvas({
       setGenProgress(0);
       setClusterStepText('');
     }
-  };
+  };  };
 
   const handleDeleteCluster = async (targetId, targetEmail = null) => {
     if (!targetId) return;
@@ -858,6 +856,7 @@ export default function WorkerCanvas({
       {/* 3. Single Continuous Horizon Express Train Consist (Stationed in Middle Tunnel) */}
       <div 
         className={`train-consist-single ${trainPosition ? `pos-${trainPosition}` : 'pos-middle'}`}
+        style={{ transition: trainTransition }}
       >
         {/* Seamless Continuous Train Body - Zero Cuts / Zero Tukde */}
         <div className="train-body-continuous">
