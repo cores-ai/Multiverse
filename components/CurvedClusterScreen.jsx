@@ -191,15 +191,15 @@ export default function CurvedClusterScreen({
           </div>
         </div>
 
-        {/* RIGHT ACTIONS: Grid & Zoom Controls + Live Poll Button & Active Pulse */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* RIGHT ACTIONS: Grid Toggle, Zoom In (+), Zoom Out (-) */}
+        <div style={{ display: 'flex', alignItems: 'center' }}>
           {/* 3 Buttons: Grid Toggle, Zoom In (+), Zoom Out (-) */}
           <div 
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               background: 'rgba(5, 10, 20, 0.75)',
-              border: '1px solid rgba(0, 240, 255, 0.25)',
+              border: '1px solid rgba(0, 240, 255, 0.28)',
               borderRadius: '6px',
               padding: '2px 4px',
               gap: '4px'
@@ -211,8 +211,8 @@ export default function CurvedClusterScreen({
               onClick={onToggleGrid}
               title="Toggle Grid"
               style={{
-                width: '24px',
-                height: '22px',
+                width: '26px',
+                height: '24px',
                 background: showGrid ? 'rgba(0, 240, 255, 0.15)' : 'transparent',
                 border: showGrid ? '1px solid #00F0FF' : '1px solid transparent',
                 borderRadius: '4px',
@@ -225,7 +225,7 @@ export default function CurvedClusterScreen({
                 transition: 'all 0.15s ease'
               }}
             >
-              <Grid size={13} />
+              <Grid size={14} />
             </button>
 
             {/* Zoom In (+) Button */}
@@ -234,8 +234,8 @@ export default function CurvedClusterScreen({
               onClick={onZoomIn}
               title="Zoom In"
               style={{
-                width: '20px',
-                height: '22px',
+                width: '22px',
+                height: '24px',
                 background: 'transparent',
                 border: 'none',
                 color: '#94A3B8',
@@ -248,7 +248,7 @@ export default function CurvedClusterScreen({
               onMouseEnter={(e) => { e.currentTarget.style.color = '#00F0FF'; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; }}
             >
-              <Plus size={13} strokeWidth={2.2} />
+              <Plus size={14} strokeWidth={2.2} />
             </button>
 
             {/* Zoom Out (-) Button */}
@@ -257,8 +257,8 @@ export default function CurvedClusterScreen({
               onClick={onZoomOut}
               title="Zoom Out"
               style={{
-                width: '20px',
-                height: '22px',
+                width: '22px',
+                height: '24px',
                 background: 'transparent',
                 border: 'none',
                 color: '#94A3B8',
@@ -271,36 +271,8 @@ export default function CurvedClusterScreen({
               onMouseEnter={(e) => { e.currentTarget.style.color = '#00F0FF'; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; }}
             >
-              <Minus size={13} strokeWidth={2.2} />
+              <Minus size={14} strokeWidth={2.2} />
             </button>
-          </div>
-
-          <button
-            onClick={handlePollOtp}
-            disabled={isPolling}
-            style={{
-              background: 'rgba(0, 240, 255, 0.1)',
-              border: '1px solid rgba(0, 240, 255, 0.4)',
-              borderRadius: '5px',
-              color: '#00F0FF',
-              padding: '4px 10px',
-              fontFamily: 'var(--font-mono, monospace)',
-              fontSize: '10px',
-              fontWeight: 700,
-              cursor: isPolling ? 'wait' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <RefreshCw size={11} className={isPolling ? 'animate-spin' : ''} />
-            <span>{isPolling ? 'POLLING...' : 'POLL OTP'}</span>
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#10B981', fontSize: '10px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700 }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px #10B981' }} />
-            <span>ACTIVE</span>
           </div>
         </div>
       </div>
