@@ -89,6 +89,10 @@ export default function OwnerManagementDashboard() {
   // Database fleet state (Neon PostgreSQL, Upstash Redis, MongoDB Atlas)
   const [databaseAccounts, setDatabaseAccounts] = useState([]);
 
+  // Extracted repository files map from dropped archive / zip
+  const [extractedRepoFiles, setExtractedRepoFiles] = useState({});
+  const [pipelineTrigger, setPipelineTrigger] = useState(0);
+
   // Modals
   const [showDeployModal, setShowDeployModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
@@ -255,7 +259,7 @@ export default function OwnerManagementDashboard() {
     healthStatusText = 'Server pura healthy hai, balanced hai';
   }
 
-  // Drag and Drop File Handlers with Pre-flight Security Scanning
+  // Drag and Drop File Handlers with Pre-flight Security Scanning & Deep Zip Unpacking
   const handleProcessRepoFile = async (file) => {
     if (!file) return;
     setIsScanningRepo(true);
@@ -279,8 +283,64 @@ export default function OwnerManagementDashboard() {
       return;
     }
 
-    // 2. Deep content inspection for text/source files
-    if (file.type.includes('text') || lowerName.endsWith('.json') || lowerName.endsWith('.js') || lowerName.endsWith('.ts') || lowerName.endsWith('.py') || lowerName.endsWith('.txt')) {
+    // 2. Deep Zip extraction if an archive is dropped
+    let extractedMap = {};
+    if (lowerName.endsWith('.zip')) {
+      try {
+        if (!window.JSZip) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('Failed to load zip parser'));
+            document.head.appendChild(script);
+          });
+        }
+
+        const zip = await window.JSZip.loadAsync(file);
+        const entries = Object.keys(zip.files).filter(p => !zip.files[p].dir);
+
+        // Detect single top-level folder prefix (e.g. giveaway-main/)
+        let commonPrefix = '';
+        if (entries.length > 0) {
+          const firstSlash = entries[0].indexOf('/');
+          if (firstSlash !== -1) {
+            const prefixCandidate = entries[0].substring(0, firstSlash + 1);
+            if (entries.every(e => e.startsWith(prefixCandidate))) {
+              commonPrefix = prefixCandidate;
+            }
+          }
+        }
+
+        const secretRegex = /((ghp_|gho_|github_pat_|railway_token|rly_tok_|sk-[a-zA-Z0-9]{20,}|eyJhbGciOi|bot_token=|telegram_bot=|[a-z0-9_]*(?:secret|apikey|private_key)\s*[:=]\s*["'][a-z0-9_\-]{8,}["']))/i;
+
+        for (const [relativePath, entry] of Object.entries(zip.files)) {
+          if (entry.dir) continue;
+          if (relativePath.includes('__MACOSX') || relativePath.includes('.DS_Store') || relativePath.includes('.git/')) continue;
+
+          const targetPath = commonPrefix ? relativePath.substring(commonPrefix.length) : relativePath;
+          if (!targetPath) continue;
+
+          const isBinary = /\.(png|jpe?g|gif|ico|webp|svg|woff2?|eot|ttf|otf|pdf|zip|tar|gz|exe|bin|node)$/i.test(targetPath);
+          if (isBinary) {
+            const base64Data = await entry.async('base64');
+            extractedMap[targetPath] = { content: base64Data, encoding: 'base64' };
+          } else {
+            const textData = await entry.async('string');
+            if (secretRegex.test(textData)) {
+              setIsScanningRepo(false);
+              setRepoScanError(`Security Alert: Leaked API key detected in "${targetPath}". Remove secrets before deploying.`);
+              return;
+            }
+            extractedMap[targetPath] = { content: textData, encoding: 'utf-8' };
+          }
+        }
+
+        setExtractedRepoFiles(extractedMap);
+      } catch (zipErr) {
+        console.warn('JSZip extraction notice:', zipErr.message);
+      }
+    } else if (file.type.includes('text') || lowerName.endsWith('.json') || lowerName.endsWith('.js') || lowerName.endsWith('.ts') || lowerName.endsWith('.py') || lowerName.endsWith('.txt')) {
       try {
         const text = await file.text();
         const secretRegex = /((ghp_|gho_|github_pat_|railway_token|rly_tok_|sk-[a-zA-Z0-9]{20,}|eyJhbGciOi|bot_token=|telegram_bot=|[a-z0-9_]*(?:secret|apikey|private_key)\s*[:=]\s*["'][a-z0-9_\-]{8,}["']))/i;
@@ -289,15 +349,24 @@ export default function OwnerManagementDashboard() {
           setRepoScanError('Security Alert: Raw API keys or bot tokens detected in code files. Remove secrets from code before deploying.');
           return;
         }
-      } catch (e) {
-        // Binary files skip direct string regex
-      }
+        extractedMap[file.name] = { content: text, encoding: 'utf-8' };
+        setExtractedRepoFiles(extractedMap);
+      } catch (e) {}
     }
 
-    const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-').toLowerCase();
+    // Clean repo name: strip trailing -main, -master, -dev, -latest and extension
+    const cleanName = file.name
+      .replace(/\.[^/.]+$/, '')
+      .replace(/-(main|master|dev|latest)$/i, '')
+      .replace(/[^a-zA-Z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .toLowerCase();
+
+    const filesCount = Object.keys(extractedMap).length;
     setRepoFile({
       name: file.name,
-      size: (file.size / 1024).toFixed(1) + ' KB'
+      size: (file.size / 1024).toFixed(1) + ' KB',
+      filesCount
     });
     setNewRepoName(prev => (prev && prev !== 'ghost-telegram-bot' ? prev : (cleanName || 'deployed-service')));
     setIsScanningRepo(false);
@@ -336,6 +405,7 @@ export default function OwnerManagementDashboard() {
   const handleResetRepoFile = (e) => {
     if (e) e.stopPropagation();
     setRepoFile(null);
+    setExtractedRepoFiles({});
     setRepoScanError(null);
     setIsScanningRepo(false);
     if (repoFileInputRef.current) repoFileInputRef.current.value = '';
@@ -352,7 +422,7 @@ export default function OwnerManagementDashboard() {
   // Handlers
   const handleDeploySubmit = async (e) => {
     e.preventDefault();
-    const finalRepoName = newRepoName.trim() || (repoFile ? repoFile.name.replace(/\.[^/.]+$/, '') : 'ghost-service');
+    const finalRepoName = newRepoName.trim() || (repoFile ? repoFile.name.replace(/\.[^/.]+$/, '').replace(/-(main|master|dev|latest)$/i, '') : 'ghost-service');
     if (!finalRepoName) return;
     setIsSubmitting(true);
 
@@ -366,6 +436,20 @@ export default function OwnerManagementDashboard() {
         }
       });
 
+      // Prepare codebase payload: send extracted files if available, or clean fallback
+      const filesPayload = Object.keys(extractedRepoFiles).length > 0 
+        ? extractedRepoFiles 
+        : {
+            'README.md': {
+              content: `# ${finalRepoName}\nDeployed via Multiverse Autonomous Controller.`,
+              encoding: 'utf-8'
+            }
+          };
+
+      // Trigger the real-time autonomous train pipeline immediately!
+      setPipelineTrigger(Date.now());
+      setShowDeployModal(false);
+
       const res = await fetch('/api/repos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -373,17 +457,17 @@ export default function OwnerManagementDashboard() {
           repoName: finalRepoName,
           serviceType: newRepoType,
           envVariables: envObj,
-          files: {
-            'README.md': `# ${finalRepoName}\nDeployed via GhostVPS Owner Management Console.`
-          }
+          files: filesPayload
         })
       });
 
       const data = await res.json();
       if (data.success) {
-        setShowDeployModal(false);
         setNewRepoName('');
-        setActiveModule('repos');
+        setRepoFile(null);
+        setExtractedRepoFiles({});
+        setEnvFile(null);
+        setNewRepoEnvs('');
         fetchData();
       } else {
         alert(`Deployment Error: ${data.error || 'Check server logs'}`);
@@ -1123,6 +1207,7 @@ export default function OwnerManagementDashboard() {
               setZoom={setZoom}
               showGrid={showGrid}
               setShowGrid={setShowGrid}
+              triggerPipeline={pipelineTrigger}
             />
           </>
         ) : activeModule === 'storage_overview' ? (
@@ -2164,7 +2249,7 @@ export default function OwnerManagementDashboard() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div className="deploy-drag-badge">
                             <Check size={12} />
-                            <span>{repoFile.name} ({repoFile.size})</span>
+                            <span>{repoFile.name} ({repoFile.size}{repoFile.filesCount ? ` • ${repoFile.filesCount} files` : ''})</span>
                           </div>
                           <button
                             type="button"
