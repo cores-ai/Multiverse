@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Copy, Check, RefreshCw, Key, ShieldCheck } from 'lucide-react';
+import { Copy, Check, RefreshCw, Key, ShieldCheck, Grid, Plus, Minus } from 'lucide-react';
 
 export default function CurvedClusterScreen({
   accounts = [],
@@ -9,6 +9,10 @@ export default function CurvedClusterScreen({
   pingStatus = { latency: 38 },
   onQuickAddWorker,
   onRefresh,
+  showGrid = true,
+  onToggleGrid,
+  onZoomIn,
+  onZoomOut,
   className = ''
 }) {
   const [otp, setOtp] = useState(null);
@@ -187,8 +191,90 @@ export default function CurvedClusterScreen({
           </div>
         </div>
 
-        {/* RIGHT ACTIONS: Live Poll Button & Active Pulse */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* RIGHT ACTIONS: Grid & Zoom Controls + Live Poll Button & Active Pulse */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* 3 Buttons: Grid Toggle, Zoom In (+), Zoom Out (-) */}
+          <div 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              background: 'rgba(5, 10, 20, 0.75)',
+              border: '1px solid rgba(0, 240, 255, 0.25)',
+              borderRadius: '6px',
+              padding: '2px 4px',
+              gap: '4px'
+            }}
+          >
+            {/* Grid Toggle Button */}
+            <button
+              type="button"
+              onClick={onToggleGrid}
+              title="Toggle Grid"
+              style={{
+                width: '24px',
+                height: '22px',
+                background: showGrid ? 'rgba(0, 240, 255, 0.15)' : 'transparent',
+                border: showGrid ? '1px solid #00F0FF' : '1px solid transparent',
+                borderRadius: '4px',
+                color: '#00F0FF',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: showGrid ? '0 0 6px rgba(0, 240, 255, 0.3)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Grid size={13} />
+            </button>
+
+            {/* Zoom In (+) Button */}
+            <button
+              type="button"
+              onClick={onZoomIn}
+              title="Zoom In"
+              style={{
+                width: '20px',
+                height: '22px',
+                background: 'transparent',
+                border: 'none',
+                color: '#94A3B8',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#00F0FF'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; }}
+            >
+              <Plus size={13} strokeWidth={2.2} />
+            </button>
+
+            {/* Zoom Out (-) Button */}
+            <button
+              type="button"
+              onClick={onZoomOut}
+              title="Zoom Out"
+              style={{
+                width: '20px',
+                height: '22px',
+                background: 'transparent',
+                border: 'none',
+                color: '#94A3B8',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#00F0FF'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; }}
+            >
+              <Minus size={13} strokeWidth={2.2} />
+            </button>
+          </div>
+
           <button
             onClick={handlePollOtp}
             disabled={isPolling}

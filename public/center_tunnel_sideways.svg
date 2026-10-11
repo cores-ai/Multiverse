@@ -1,0 +1,149 @@
+<svg viewBox="0 0 170 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Central Mountain Massive Strata (High Peak in Center, Zero V-Dip) -->
+    <linearGradient id="centerSidewaysRock" x1="85" y1="0" x2="85" y2="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#223044" />
+      <stop offset="35%" stopColor="#162232" />
+      <stop offset="75%" stopColor="#0D1522" />
+      <stop offset="100%" stopColor="#05080E" />
+    </linearGradient>
+
+    <!-- Summit Light Sheen -->
+    <linearGradient id="centerSummitFacet" x1="85" y1="0" x2="85" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#4A5C75" stopOpacity="0.85" />
+      <stop offset="100%" stopColor="#1E2B3C" stopOpacity="0.2" />
+    </linearGradient>
+
+    <!-- Sideways Concrete Arch Collars -->
+    <linearGradient id="centerLeftCollar" x1="28" y1="28" x2="10" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#CBD5E1" />
+      <stop offset="45%" stopColor="#94A3B8" />
+      <stop offset="100%" stopColor="#334155" />
+    </linearGradient>
+
+    <linearGradient id="centerRightCollar" x1="142" y1="28" x2="160" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#CBD5E1" />
+      <stop offset="45%" stopColor="#94A3B8" />
+      <stop offset="100%" stopColor="#334155" />
+    </linearGradient>
+
+    <!-- Deep Cavern Interior Bores -->
+    <linearGradient id="centerLeftVoid" x1="12" y1="46" x2="48" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#000000" stopOpacity="1" />
+      <stop offset="60%" stopColor="#04070D" stopOpacity="0.95" />
+      <stop offset="100%" stopColor="#0D1522" stopOpacity="0.8" />
+    </linearGradient>
+
+    <linearGradient id="centerRightVoid" x1="158" y1="46" x2="122" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#000000" stopOpacity="1" />
+      <stop offset="60%" stopColor="#04070D" stopOpacity="0.95" />
+      <stop offset="100%" stopColor="#0D1522" stopOpacity="0.8" />
+    </linearGradient>
+
+    <!-- Generator Apex Reactor Core Glow -->
+    <radialGradient id="centerCoreAura" cx="85" cy="18" r="26" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#00F0FF" stopOpacity="0.7" />
+      <stop offset="50%" stopColor="#00F0FF" stopOpacity="0.18" />
+      <stop offset="100%" stopColor="#00F0FF" stopOpacity="0" />
+    </radialGradient>
+
+    <filter id="centerSidewaysShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" floodColor="#000000" floodOpacity="0.9" />
+    </filter>
+  </defs>
+
+  <g filter="url(#centerSidewaysShadow)">
+    <!-- 1. Deep Cavern Passages (Hollow doorways on tracks) -->
+    <!-- West Cavern Bore (Facing Leftwards into West track) -->
+    <path 
+      d="M 12,58 
+         C 10,48 14,38 28,34 
+         C 42,30 52,36 56,46 
+         L 52,58 Z" 
+      fill="url(#centerLeftVoid)" 
+    />
+    <!-- East Cavern Bore (Facing Rightwards into East track) -->
+    <path 
+      d="M 158,58 
+         C 160,48 156,38 142,34 
+         C 128,30 118,36 114,46 
+         L 118,58 Z" 
+      fill="url(#centerRightVoid)" 
+    />
+
+    <!-- 2. Continuous Central Mountain Rock Massif (High Peak in Center at y=2, Zero Dips) -->
+    <path 
+      d="M 6,58 
+         C 8,42 16,28 32,18 
+         C 48,8 66,2 85,2 
+         C 104,2 122,8 138,18 
+         C 154,28 162,42 164,58 
+         L 148,58 
+         C 146,46 138,36 128,32 
+         C 118,28 108,32 102,40 
+         C 98,46 92,48 85,48 
+         C 78,48 72,46 68,40 
+         C 62,32 52,28 42,32 
+         C 32,36 24,46 22,58 
+         Z" 
+      fill="url(#centerSidewaysRock)" 
+    />
+
+    <!-- 3. Chiseled Mountain Peak Facets & Rock Ridges -->
+    <!-- Summit Crown Facets -->
+    <path 
+      d="M 60,12 L 85,2 L 110,12 L 95,22 L 75,22 Z" 
+      fill="url(#centerSummitFacet)" 
+    />
+    <path 
+      d="M 85,2 L 95,22 L 85,36 L 75,22 Z" 
+      fill="#28384D" 
+      opacity="0.85" 
+    />
+    <path 
+      d="M 60,12 L 75,22 L 48,30 L 32,18 Z" 
+      fill="#1A2636" 
+      opacity="0.75" 
+    />
+    <path 
+      d="M 110,12 L 138,18 L 122,30 L 95,22 Z" 
+      fill="#111A26" 
+      opacity="0.85" 
+    />
+
+    <!-- 4. West Sideways Arch Portal Lip (Faces West along tracks) -->
+    <path 
+      d="M 12,56 
+         C 10,46 16,36 26,32 
+         C 34,29 42,32 46,38 
+         L 40,40 
+         C 36,36 30,34 24,37 
+         C 18,40 14,48 16,56 Z" 
+      fill="url(#centerLeftCollar)" 
+    />
+
+    <!-- 5. East Sideways Arch Portal Lip (Faces East along tracks) -->
+    <path 
+      d="M 158,56 
+         C 160,46 154,36 144,32 
+         C 136,29 128,32 124,38 
+         L 130,40 
+         C 134,36 140,34 146,37 
+         C 152,40 156,48 154,56 Z" 
+      fill="url(#centerRightCollar)" 
+    />
+
+    <!-- 6. Center Energy Reactor / Cluster Beacon on Summit -->
+    <circle cx="85" cy="18" r="22" fill="url(#centerCoreAura)" />
+    <!-- Cybernetic Beacon Node -->
+    <rect x="82" y="5" width="6" height="4" rx="1" fill="#334155" />
+    <circle cx="85" cy="7" r="1.8" fill="#00F0FF" />
+    <circle cx="85" cy="7" r="0.9" fill="#FFFFFF" />
+
+    <!-- Solid Base Ground Footholds -->
+    <path 
+      d="M 68,46 L 102,46 L 98,62 L 72,62 Z" 
+      fill="#0A0F18" 
+    />
+  </g>
+</svg>

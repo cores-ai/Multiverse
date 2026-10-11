@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "iq4u8- server management",
+  title: "iq4u8- server",
   description: "Autonomous multi-account Railway fleet balancer, GitHub ingestion pipeline, and encrypted environment variable vault.",
 };
 

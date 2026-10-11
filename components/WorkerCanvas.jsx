@@ -14,16 +14,26 @@ export default function WorkerCanvas({
   onRefresh,
   onOpenAccount,
   mode = 'server',
-  onDeleteNode
+  onDeleteNode,
+  zoom: externalZoom,
+  setZoom: externalSetZoom,
+  showGrid: externalShowGrid,
+  setShowGrid: externalSetShowGrid
 }) {
   const containerRef = useRef(null);
   
   // Canvas Transform State (Pan & Zoom) - Default 50% Zoom
-  const [zoom, setZoom] = useState(0.5);
+  const [internalZoom, setInternalZoom] = useState(0.5);
+  const zoom = externalZoom !== undefined ? externalZoom : internalZoom;
+  const setZoom = externalSetZoom || setInternalZoom;
+
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
-  const [showGrid, setShowGrid] = useState(true);
+
+  const [internalShowGrid, setInternalShowGrid] = useState(true);
+  const showGrid = externalShowGrid !== undefined ? externalShowGrid : internalShowGrid;
+  const setShowGrid = externalSetShowGrid || setInternalShowGrid;
 
   // Cluster Generation State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -982,64 +992,6 @@ export default function WorkerCanvas({
           <span className="cluster-popup-text">Cluster Created Successfully</span>
         </div>
       )}
-
-      {/* ========================================================
-          FLOATING BOTTOM-LEFT HORIZONTAL TOOLBAR
-          ======================================================== */}
-      <div className="canvas-bottom-left-toolbar">
-        <button 
-          className={`canvas-control-btn ${showGrid ? 'active' : ''}`} 
-          onClick={() => setShowGrid(!showGrid)}
-          title="Toggle Morse Code Dot Grid"
-        >
-          <Grid size={15} />
-        </button>
-
-        <button 
-          className="canvas-control-btn" 
-          onClick={handleZoomIn}
-          title="Zoom In"
-        >
-          <Plus size={15} strokeWidth={2} />
-        </button>
-
-        <button 
-          className="canvas-control-btn" 
-          onClick={handleZoomOut}
-          title="Zoom Out"
-        >
-          <Minus size={15} strokeWidth={2} />
-        </button>
-
-        <button 
-          className="canvas-control-btn" 
-          onClick={handleResetView}
-          title="Fit / Center View"
-        >
-          <Maximize2 size={13} strokeWidth={2} />
-        </button>
-
-        <div className="canvas-toolbar-divider"></div>
-
-        <button 
-          className="canvas-control-btn" 
-          onClick={() => {
-            handleResetView();
-            handleAutoLayout();
-          }}
-          title="Reset View & Align Nodes"
-        >
-          <RotateCcw size={13} strokeWidth={2} />
-        </button>
-
-        <button 
-          className="canvas-control-btn canvas-zoom-badge" 
-          onClick={handleResetView}
-          title="Reset Zoom to 100%"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-      </div>
     </div>
   );
 }

@@ -77,10 +77,17 @@ button { font-family: inherit; }
 }
 
 .app-sidebar.is-collapsed {
-  margin-left: -260px;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-right: none !important;
+  box-shadow: none !important;
   transform: translateX(-100%);
   pointer-events: none;
   opacity: 0;
+  overflow: hidden;
 }
 
 .sidebar-header {

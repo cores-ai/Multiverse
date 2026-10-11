@@ -1,0 +1,118 @@
+<svg viewBox="0 0 120 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Mountain Basalt Dark Strata (Right Side) -->
+    <linearGradient id="rightSidewaysRock" x1="120" y1="0" x2="35" y2="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#1E293B" />
+      <stop offset="40%" stopColor="#131D2D" />
+      <stop offset="85%" stopColor="#0B111D" />
+      <stop offset="100%" stopColor="#04070D" />
+    </linearGradient>
+
+    <!-- Mountain Crest Sunlight Facet (Right Side) -->
+    <linearGradient id="rightSidewaysRidge" x1="120" y1="0" x2="50" y2="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#475569" stopOpacity="0.8" />
+      <stop offset="60%" stopColor="#334155" stopOpacity="0.5" />
+      <stop offset="100%" stopColor="#1E293B" stopOpacity="0.1" />
+    </linearGradient>
+
+    <!-- Sideways Profile Concrete Arch Collar (Angled towards -X along tracks) -->
+    <linearGradient id="rightProfileCollar" x1="62" y1="26" x2="28" y2="68" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#CBD5E1" />
+      <stop offset="35%" stopColor="#94A3B8" />
+      <stop offset="75%" stopColor="#475569" />
+      <stop offset="100%" stopColor="#1E293B" />
+    </linearGradient>
+
+    <!-- Cavern Bore Deep Void (Receding rightwards into mountain) -->
+    <linearGradient id="rightDeepVoid" x1="32" y1="48" x2="80" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#090E17" stopOpacity="0.9" />
+      <stop offset="65%" stopColor="#020408" stopOpacity="0.98" />
+      <stop offset="100%" stopColor="#000000" stopOpacity="1" />
+    </linearGradient>
+
+    <!-- Cyberpunk Portal Keystone Glow -->
+    <radialGradient id="rightKeystoneGlow" cx="46" cy="30" r="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#00F0FF" stopOpacity="0.8" />
+      <stop offset="45%" stopColor="#00F0FF" stopOpacity="0.2" />
+      <stop offset="100%" stopColor="#00F0FF" stopOpacity="0" />
+    </radialGradient>
+
+    <filter id="rightSidewaysShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="2" dy="3" stdDeviation="3.5" floodColor="#000000" floodOpacity="0.85" />
+    </filter>
+  </defs>
+
+  <g filter="url(#rightSidewaysShadow)">
+    <!-- 1. Deep Cavern Bore (Behind track/train) - Angled sideways into mountain -->
+    <path 
+      d="M 68,32 
+         C 52,30 36,34 31,42 
+         C 28,47 29,56 33,62 
+         L 70,62 
+         C 74,55 74,38 68,32 Z" 
+      fill="url(#rightDeepVoid)" 
+    />
+
+    <!-- 2. Massive Mountain Cliff Body (Flush to right screen edge x=120) -->
+    <!-- Rises high on the right and slopes naturally over the track to the left -->
+    <path 
+      d="M 120,0 
+         L 74,2 
+         C 62,4 52,8 44,15 
+         C 36,21 29,28 25,35 
+         C 23,39 24,44 26,48 
+         C 28,53 33,58 36,62 
+         L 42,62 
+         C 50,55 56,48 56,42 
+         C 56,36 64,31 74,30 
+         L 120,30 Z" 
+      fill="url(#rightSidewaysRock)" 
+    />
+
+    <!-- 3. Geological Rock Strata & Chiseled Facets -->
+    <path 
+      d="M 120,0 L 82,10 L 102,28 L 120,28 Z" 
+      fill="url(#rightSidewaysRidge)" 
+    />
+    <path 
+      d="M 82,10 L 48,9 L 65,22 L 82,10 Z" 
+      fill="#1E293B" 
+      opacity="0.9" 
+    />
+    <path 
+      d="M 65,22 L 44,15 L 52,32 L 65,22 Z" 
+      fill="#0F172A" 
+    />
+    <path 
+      d="M 102,28 L 72,22 L 82,40 L 120,40 L 120,28 Z" 
+      fill="#141E2C" 
+      opacity="0.85" 
+    />
+
+    <!-- 4. Sideways-Profile Concrete Portal Overhang Rim (Facing West along tracks) -->
+    <!-- Profile Arch Lip that frames the sideways entrance -->
+    <path 
+      d="M 66,30 
+         C 52,28 36,33 30,40 
+         C 27,44 27,51 31,58 
+         L 37,56 
+         C 33,51 33,46 36,42 
+         C 41,37 54,33 66,34 Z" 
+      fill="url(#rightProfileCollar)" 
+    />
+
+    <!-- 5. Cyberpunk Portal Keystone & Luminescent Beacon -->
+    <circle cx="46" cy="30" r="8" fill="url(#rightKeystoneGlow)" />
+    <path 
+      d="M 42,29 L 50,29 L 48,33 L 44,33 Z" 
+      fill="#00F0FF" 
+    />
+    <circle cx="46" cy="31" r="1.4" fill="#FFFFFF" />
+
+    <!-- 6. Foreground Rock Footing (Anchors cleanly at ground base) -->
+    <path 
+      d="M 120,46 L 84,46 C 76,46 70,51 68,58 L 66,64 L 120,64 Z" 
+      fill="#080C14" 
+    />
+  </g>
+</svg>

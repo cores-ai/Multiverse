@@ -4,24 +4,20 @@ import { getD1RepoDeployments, saveD1RepoDeployment, saveD1RepoEnvs, getD1RepoEn
 
 export async function GET() {
     try {
-        const d1Repos = await getD1RepoDeployments().catch(() => []);
-        if (d1Repos && d1Repos.length > 0) {
-            const mapped = d1Repos.map(r => ({
-                repoId: r.repo_name,
-                repoName: r.repo_name,
-                assignedAccountId: r.account_id,
-                serviceType: 'HEAVY',
-                branch: 'main',
-                deploymentStatus: r.deployment_status,
-                liveUrl: r.live_url
-            }));
-            return NextResponse.json({ success: true, repos: mapped });
-        }
-
-        const repos = await getRepositories();
-        return NextResponse.json({ success: true, repos });
+        const d1Repos = await getD1RepoDeployments();
+        const mapped = (d1Repos || []).map(r => ({
+            repoId: r.repo_name,
+            repoName: r.repo_name,
+            assignedAccountId: r.account_id,
+            serviceType: 'HEAVY',
+            branch: 'main',
+            deploymentStatus: r.deployment_status,
+            liveUrl: r.live_url
+        }));
+        return NextResponse.json({ success: true, repos: mapped });
     } catch (e) {
-        return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+        console.error('Error fetching D1 repos:', e.message);
+        return NextResponse.json({ success: true, repos: [] });
     }
 }
 

@@ -15,7 +15,7 @@ const WorkerCanvas = dynamic(() => import('@/components/WorkerCanvas'), { ssr: f
 export default function OwnerManagementDashboard() {
   // Navigation & Accordion Sections
   const [activeModule, setActiveModule] = useState('overview');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [openSections, setOpenSections] = useState({
     server: true,
     storage: false,
@@ -43,6 +43,13 @@ export default function OwnerManagementDashboard() {
     }
   };
   const [showConstellation, setShowConstellation] = useState(false);
+
+  // Canvas View Controls (Zoom & Morse Grid)
+  const [zoom, setZoom] = useState(0.5);
+  const [showGrid, setShowGrid] = useState(true);
+  const handleZoomIn = () => setZoom(z => Math.min(Number((z + 0.10).toFixed(2)), 2.0));
+  const handleZoomOut = () => setZoom(z => Math.max(Number((z - 0.10).toFixed(2)), 0.15));
+  const handleToggleGrid = () => setShowGrid(prev => !prev);
 
   // Fleet data states (Synchronized with backend for zero hydration flash)
   const [accounts, setAccounts] = useState([]);
@@ -222,7 +229,7 @@ export default function OwnerManagementDashboard() {
   };
 
   useEffect(() => {
-    document.title = "iq4u8- server management";
+    document.title = "iq4u8- server";
     fetchData();
     const interval = setInterval(fetchData, 8000);
 
@@ -674,36 +681,6 @@ export default function OwnerManagementDashboard() {
 
   return (
     <div className="app-shell">
-      {/* Mini Hamburger Trigger (Only visible when sidebar is closed) */}
-      {!isSidebarOpen && (
-        <button
-          onClick={() => setIsSidebarOpen(true)}
-          className="mini-hamburger-btn"
-          title="Open Navigation"
-          style={{
-            position: 'fixed',
-            top: '12px',
-            left: '12px',
-            zIndex: 1000,
-            width: '32px',
-            height: '32px',
-            borderRadius: '8px',
-            background: 'rgba(10, 16, 26, 0.85)',
-            border: '1px solid rgba(0, 240, 255, 0.35)',
-            color: '#00F0FF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 0 14px rgba(0, 240, 255, 0.2)',
-            backdropFilter: 'blur(8px)',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          <Menu size={16} />
-        </button>
-      )}
-
       {/* ========================================================
           1. SLIDING LEFT SIDEBAR (Hideable on X click)
           ======================================================== */}
@@ -712,7 +689,7 @@ export default function OwnerManagementDashboard() {
       >
         <div className="sidebar-scrollable-content">
           {/* Brand Header */}
-          <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
+          <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '4px' }}>
             <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div 
                 className="brand-glyph"
@@ -728,7 +705,7 @@ export default function OwnerManagementDashboard() {
               </div>
               <div className="brand-text-block">
                 <span className="brand-title" style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '-0.01em', textTransform: 'lowercase', whiteSpace: 'nowrap' }}>
-                  iq4u8- server management
+                  iq4u8- server
                 </span>
               </div>
             </div>
@@ -1032,8 +1009,31 @@ export default function OwnerManagementDashboard() {
       <main className="app-main">
         {/* Sticky Top Header */}
         <header className="main-top-header">
-          <div className="header-breadcrumbs">
-            <span>iq4u8- server management</span>
+          <div className="header-breadcrumbs" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {!isSidebarOpen && (
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="transparent-hamburger-btn"
+                title="Open Navigation"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  boxShadow: 'none',
+                  color: '#00F0FF',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  marginRight: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'opacity 0.2s ease'
+                }}
+              >
+                <Menu size={16} />
+              </button>
+            )}
+            <span>iq4u8- server</span>
             <ChevronRight size={13} />
             <span>{getBreadcrumbSection()}</span>
             <ChevronRight size={13} />
@@ -1066,6 +1066,10 @@ export default function OwnerManagementDashboard() {
               pingStatus={pingStatus}
               onQuickAddWorker={handleQuickAutoAddWorker}
               onRefresh={fetchData}
+              showGrid={showGrid}
+              onToggleGrid={handleToggleGrid}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
             />
 
             <WorkerCanvas
@@ -1082,6 +1086,10 @@ export default function OwnerManagementDashboard() {
               onDeleteNode={handleDeleteAccount}
               onRefresh={fetchData}
               onOpenAccount={(acc) => setActiveModule('accounts')}
+              zoom={zoom}
+              setZoom={setZoom}
+              showGrid={showGrid}
+              setShowGrid={setShowGrid}
             />
           </>
         ) : activeModule === 'storage_overview' ? (

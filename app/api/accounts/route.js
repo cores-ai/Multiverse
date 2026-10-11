@@ -5,27 +5,22 @@ import { getRailwayMe } from '@/lib/railway';
 
 export async function GET() {
     try {
-        // First try fetching directly from Cloudflare D1
-        const d1Accounts = await getD1RailwayAccounts().catch(() => []);
-        if (d1Accounts && d1Accounts.length > 0) {
-            const mapped = d1Accounts.map(a => ({
-                accountId: a.account_id,
-                email: a.email,
-                repoName: a.email,
-                remainingCredits: a.credits_remaining,
-                activeProjectsCount: a.repos_count,
-                maxCapacity: a.max_capacity,
-                status: a.status.toLowerCase(),
-                createdAt: a.created_at
-            }));
-            return NextResponse.json({ success: true, accounts: mapped });
-        }
-
-        // Fallback to local accounts model
-        const accounts = await getAccounts();
-        return NextResponse.json({ success: true, accounts });
+        // Cloudflare D1 is the strict single source of truth
+        const d1Accounts = await getD1RailwayAccounts();
+        const mapped = (d1Accounts || []).map(a => ({
+            accountId: a.account_id,
+            email: a.email,
+            repoName: a.email,
+            remainingCredits: Number(a.credits_remaining || 5.0),
+            activeProjectsCount: Number(a.repos_count || 0),
+            maxCapacity: Number(a.max_capacity || 2),
+            status: (a.status || 'active').toLowerCase(),
+            createdAt: a.created_at
+        }));
+        return NextResponse.json({ success: true, accounts: mapped });
     } catch (e) {
-        return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+        console.error('Error fetching D1 accounts:', e.message);
+        return NextResponse.json({ success: true, accounts: [] });
     }
 }
 
