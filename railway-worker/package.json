@@ -1,0 +1,27 @@
+{
+  "name": "playwright-firefox-sessions",
+  "version": "1.0.0",
+  "description": "Playwright Firefox persistent browser sessions setup",
+  "main": "telegram_bot.js",
+  "scripts": {
+    "start": "node telegram_bot.js",
+    "session": "node telegram_bot.js",
+    "postinstall": "npx playwright install firefox && npx playwright install-deps firefox",
+    "save-state": "node save_load_storage_state.js save",
+    "load-state": "node save_load_storage_state.js load",
+    "install-firefox": "npx playwright install firefox"
+  },
+  "keywords": [
+    "playwright",
+    "firefox",
+    "persistent-session",
+    "browser-profile"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "node-telegram-bot-api": "^0.66.0",
+    "playwright": "^1.50.0"
+  }
+}
