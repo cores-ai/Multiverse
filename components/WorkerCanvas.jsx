@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { 
-  Plus, Minus, Maximize2, Grid, RotateCcw, Trash2, MoreVertical
+  Plus, Minus, Maximize2, Grid, RotateCcw, Trash2, MoreVertical, Terminal, UploadCloud, Key
 } from 'lucide-react';
 
 export default function WorkerCanvas({ 
@@ -13,6 +13,9 @@ export default function WorkerCanvas({
   onQuickAddWorker,
   onRefresh,
   onOpenAccount,
+  onViewLogs,
+  onModifyRepo,
+  onModifyEnv,
   mode = 'server',
   onDeleteNode,
   zoom: externalZoom,
@@ -607,10 +610,12 @@ export default function WorkerCanvas({
             label = acc.email || acc.repoName || acc.accountId || `worker-${idx + 1}`;
           }
 
+          const isDead = acc.status === 'DEAD' || acc.status === 'FAILED' || acc.status === 'ERROR' || assignedRepos.some(r => ['FAILED', 'DEAD', 'CRASHED', 'ERROR'].includes((r.deploymentStatus || '').toUpperCase()));
+
           return (
             <div
               key={id}
-              className={`worker-canvas-card ${isDragging ? 'dragging' : ''}`}
+              className={`worker-canvas-card ${isDragging ? 'dragging' : ''} ${isDead ? 'card-dead-alert-border' : ''}`}
               style={{
                 transform: `translate(${pos.x}px, ${pos.y}px)${isDragging ? ' scale(1.03)' : ''}`,
                 zIndex: isDragging ? 50 : 10
@@ -639,13 +644,26 @@ export default function WorkerCanvas({
                     </svg>
                   ) : (
                     /* GitHub Octocat Brand Icon */
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill={isDead ? '#EF4444' : 'currentColor'}>
                       <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
                     </svg>
                   )}
                 </div>
                 <span className="card-worker-title" title={label}>{label}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {isDead && (
+                    <button 
+                      className="card-logs-external-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onViewLogs) onViewLogs({ ...acc, label, repoName: assignedRepos[0]?.repoName || label });
+                      }}
+                      title="View Railway Deployment Error Logs"
+                    >
+                      <Terminal size={10} />
+                      <span>Logs</span>
+                    </button>
+                  )}
                   <button 
                     className="card-edit-btn"
                     onClick={(e) => {
@@ -685,6 +703,30 @@ export default function WorkerCanvas({
                     <span className="edit-panel-label">Repos</span>
                     <span className="edit-panel-value">{runningCount}/{maxCapacity}</span>
                   </div>
+                  <button 
+                    className="edit-panel-delete-btn"
+                    style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: '4px', paddingTop: '6px', color: '#00F0FF' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingCardId(null);
+                      if (onModifyRepo) onModifyRepo({ ...acc, label, repoName: assignedRepos[0]?.repoName || label });
+                    }}
+                  >
+                    <UploadCloud size={13} />
+                    <span>Modify Repo</span>
+                  </button>
+                  <button 
+                    className="edit-panel-delete-btn"
+                    style={{ color: '#38BDF8' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingCardId(null);
+                      if (onModifyEnv) onModifyEnv({ ...acc, label, repoName: assignedRepos[0]?.repoName || label });
+                    }}
+                  >
+                    <Key size={13} />
+                    <span>Modify ENV</span>
+                  </button>
                   <button 
                     className="edit-panel-delete-btn"
                     onClick={(e) => {

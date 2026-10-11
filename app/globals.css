@@ -933,6 +933,78 @@ button { font-family: inherit; }
   color: #10B981;
 }
 
+.deploy-drag-scanning-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  color: #00F0FF;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.deploy-drag-error-box {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #F87171;
+  font-size: 11px;
+  width: 100%;
+  text-align: left;
+}
+
+.btn-reupload-pill {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #FFFFFF;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.btn-reupload-pill:hover {
+  background: #EF4444;
+  color: #FFFFFF;
+}
+
+.card-dead-alert-border {
+  border: 1.5px solid rgba(239, 68, 68, 0.8) !important;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.35), inset 0 0 10px rgba(239, 68, 68, 0.15) !important;
+}
+
+.card-logs-external-btn {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: #F87171;
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.card-logs-external-btn:hover {
+  background: #EF4444;
+  color: #FFFFFF;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+}
+
 .form-group-block {
   margin-bottom: 14px;
 }

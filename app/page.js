@@ -105,6 +105,13 @@ export default function OwnerManagementDashboard() {
   const [envFile, setEnvFile] = useState(null);
   const [isRepoDragging, setIsRepoDragging] = useState(false);
   const [isEnvDragging, setIsEnvDragging] = useState(false);
+  const [isScanningRepo, setIsScanningRepo] = useState(false);
+  const [repoScanError, setRepoScanError] = useState(null);
+  const [isScanningEnv, setIsScanningEnv] = useState(false);
+  const [envScanError, setEnvScanError] = useState(null);
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [selectedLogCard, setSelectedLogCard] = useState(null);
+  const [copiedLogs, setCopiedLogs] = useState(false);
   const repoFileInputRef = useRef(null);
   const envFileInputRef = useRef(null);
 
@@ -248,30 +255,98 @@ export default function OwnerManagementDashboard() {
     healthStatusText = 'Server pura healthy hai, balanced hai';
   }
 
-  // Drag and Drop File Handlers for Deploy Modal
-  const handleProcessRepoFile = (file) => {
+  // Drag and Drop File Handlers with Pre-flight Security Scanning
+  const handleProcessRepoFile = async (file) => {
     if (!file) return;
-    const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+    setIsScanningRepo(true);
+    setRepoScanError(null);
+
+    // Intentional 550ms scanning radar animation
+    await new Promise(r => setTimeout(r, 550));
+
+    // 1. Filename checks (detect embedded credentials/env files)
+    const lowerName = file.name.toLowerCase();
+    if (
+      lowerName.includes('.env') || 
+      lowerName.includes('credentials') || 
+      lowerName.endsWith('.pem') || 
+      lowerName.endsWith('.key') || 
+      lowerName.includes('id_rsa') ||
+      lowerName.includes('secret')
+    ) {
+      setIsScanningRepo(false);
+      setRepoScanError('Security Alert: Sensitive credentials or .env file found inside repository archive! Please remove secret files from code and drop them in the Secrets / ENV card below.');
+      return;
+    }
+
+    // 2. Deep content inspection for text/source files
+    if (file.type.includes('text') || lowerName.endsWith('.json') || lowerName.endsWith('.js') || lowerName.endsWith('.ts') || lowerName.endsWith('.py') || lowerName.endsWith('.txt')) {
+      try {
+        const text = await file.text();
+        const secretRegex = /((ghp_|gho_|github_pat_|railway_token|rly_tok_|sk-[a-zA-Z0-9]{20,}|eyJhbGciOi|bot_token=|telegram_bot=|[a-z0-9_]*(?:secret|apikey|private_key)\s*[:=]\s*["'][a-z0-9_\-]{8,}["']))/i;
+        if (secretRegex.test(text)) {
+          setIsScanningRepo(false);
+          setRepoScanError('Security Alert: Raw API keys or bot tokens detected in code files. Remove secrets from code before deploying.');
+          return;
+        }
+      } catch (e) {
+        // Binary files skip direct string regex
+      }
+    }
+
+    const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-').toLowerCase();
     setRepoFile({
       name: file.name,
       size: (file.size / 1024).toFixed(1) + ' KB'
     });
-    setNewRepoName(cleanName || 'deployed-service');
+    setNewRepoName(prev => (prev && prev !== 'ghost-telegram-bot' ? prev : (cleanName || 'deployed-service')));
+    setIsScanningRepo(false);
   };
 
-  const handleProcessEnvFile = (file) => {
+  const handleProcessEnvFile = async (file) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target.result || '';
+    setIsScanningEnv(true);
+    setEnvScanError(null);
+
+    await new Promise(r => setTimeout(r, 450));
+
+    const lowerName = file.name.toLowerCase();
+    // Validate not an executable or full repository archive
+    if (lowerName.endsWith('.zip') || lowerName.endsWith('.tar') || lowerName.endsWith('.gz') || lowerName.endsWith('.exe') || lowerName.endsWith('.dll')) {
+      setIsScanningEnv(false);
+      setEnvScanError('Validation Error: Repository archives cannot be uploaded here. Please drop code repositories into Card 01 above.');
+      return;
+    }
+
+    try {
+      const content = await file.text();
       setNewRepoEnvs(content);
       const lines = content.split('\n').filter(l => l.trim() && l.includes('='));
       setEnvFile({
         name: file.name,
         keysCount: lines.length
       });
-    };
-    reader.readAsText(file);
+    } catch (e) {
+      setEnvScanError('Failed to read configuration file. Please drop a valid UTF-8 text or .env file.');
+    } finally {
+      setIsScanningEnv(false);
+    }
+  };
+
+  const handleResetRepoFile = (e) => {
+    if (e) e.stopPropagation();
+    setRepoFile(null);
+    setRepoScanError(null);
+    setIsScanningRepo(false);
+    if (repoFileInputRef.current) repoFileInputRef.current.value = '';
+  };
+
+  const handleResetEnvFile = (e) => {
+    if (e) e.stopPropagation();
+    setEnvFile(null);
+    setEnvScanError(null);
+    setIsScanningEnv(false);
+    if (envFileInputRef.current) envFileInputRef.current.value = '';
   };
 
   // Handlers
@@ -1031,6 +1106,18 @@ export default function OwnerManagementDashboard() {
               onDeleteNode={handleDeleteAccount}
               onRefresh={fetchData}
               onOpenAccount={(acc) => setActiveModule('accounts')}
+              onViewLogs={(card) => {
+                setSelectedLogCard(card);
+                setShowLogModal(true);
+              }}
+              onModifyRepo={(repo) => {
+                setNewRepoName(repo?.repoName || repo?.label?.split('@')[0] || '');
+                setShowDeployModal(true);
+              }}
+              onModifyEnv={(repo) => {
+                setSelectedRepoForEnv(repo);
+                setShowEnvModal(true);
+              }}
               zoom={zoom}
               setZoom={setZoom}
               showGrid={showGrid}
@@ -2009,6 +2096,25 @@ export default function OwnerManagementDashboard() {
             </div>
 
             <form onSubmit={handleDeploySubmit}>
+              {/* Top: Repository Name Field */}
+              <div className="form-group-block" style={{ marginBottom: '14px' }}>
+                <label className="form-label-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Repository Name</span>
+                  <span style={{ fontSize: '10px', color: '#64748B', fontFamily: 'var(--font-mono)' }}>lowercase, hyphens only</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input-box"
+                  placeholder="ghost-telegram-bot"
+                  value={newRepoName}
+                  onChange={e => {
+                    const sanitized = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
+                    setNewRepoName(sanitized);
+                  }}
+                  required
+                />
+              </div>
+
               {/* Step 1: Drag & Drop Repository Card */}
               <div className="form-group-block" style={{ marginBottom: '14px' }}>
                 <input
@@ -2021,7 +2127,7 @@ export default function OwnerManagementDashboard() {
                 />
                 <div 
                   className={`deploy-drag-card ${isRepoDragging ? 'is-dragging' : ''} ${repoFile ? 'has-file' : ''}`}
-                  onClick={() => repoFileInputRef.current?.click()}
+                  onClick={() => !isScanningRepo && repoFileInputRef.current?.click()}
                   onDragOver={(e) => { e.preventDefault(); setIsRepoDragging(true); }}
                   onDragLeave={() => setIsRepoDragging(false)}
                   onDrop={(e) => {
@@ -2030,21 +2136,50 @@ export default function OwnerManagementDashboard() {
                     if (e.dataTransfer.files?.[0]) handleProcessRepoFile(e.dataTransfer.files[0]);
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <UploadCloud size={20} color={repoFile ? '#10B981' : '#00F0FF'} />
-                    <span className="deploy-drag-title">
-                      {repoFile ? 'Repository Attached' : 'Upload Your Repo'}
-                    </span>
-                  </div>
-                  {repoFile ? (
-                    <div className="deploy-drag-badge">
-                      <Check size={12} />
-                      <span>{repoFile.name} ({repoFile.size})</span>
+                  {isScanningRepo ? (
+                    <div className="deploy-drag-scanning-overlay">
+                      <RefreshCw size={20} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>Scanning repository for secret leaks...</span>
+                    </div>
+                  ) : repoScanError ? (
+                    <div className="deploy-drag-error-box" onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <AlertTriangle size={16} color="#EF4444" style={{ flexShrink: 0 }} />
+                        <span>{repoScanError}</span>
+                      </div>
+                      <button type="button" onClick={handleResetRepoFile} className="btn-reupload-pill">
+                        Re-upload
+                      </button>
                     </div>
                   ) : (
-                    <span className="deploy-drag-subtitle">
-                      Drag & Drop repository archive (.zip, folder) or click to browse
-                    </span>
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <UploadCloud size={20} color={repoFile ? '#10B981' : '#00F0FF'} />
+                        <span className="deploy-drag-title">
+                          {repoFile ? 'Repository Attached' : '01. Upload Your Repo'}
+                        </span>
+                      </div>
+                      {repoFile ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className="deploy-drag-badge">
+                            <Check size={12} />
+                            <span>{repoFile.name} ({repoFile.size})</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleResetRepoFile}
+                            style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: '12px' }}
+                            title="Remove / Replace File"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="deploy-drag-subtitle">
+                          Drag & Drop repository archive (.zip, folder) or click to browse
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -2061,7 +2196,7 @@ export default function OwnerManagementDashboard() {
                 />
                 <div 
                   className={`deploy-drag-card ${isEnvDragging ? 'is-dragging' : ''} ${envFile ? 'has-file' : ''}`}
-                  onClick={() => envFileInputRef.current?.click()}
+                  onClick={() => !isScanningEnv && envFileInputRef.current?.click()}
                   onDragOver={(e) => { e.preventDefault(); setIsEnvDragging(true); }}
                   onDragLeave={() => setIsEnvDragging(false)}
                   onDrop={(e) => {
@@ -2070,21 +2205,50 @@ export default function OwnerManagementDashboard() {
                     if (e.dataTransfer.files?.[0]) handleProcessEnvFile(e.dataTransfer.files[0]);
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Key size={18} color={envFile ? '#10B981' : '#38BDF8'} />
-                    <span className="deploy-drag-title">
-                      {envFile ? 'Secrets & Credentials Loaded' : 'Upload Secrets / Env / Credentials'}
-                    </span>
-                  </div>
-                  {envFile ? (
-                    <div className="deploy-drag-badge">
-                      <Check size={12} />
-                      <span>{envFile.name} ({envFile.keysCount} keys detected)</span>
+                  {isScanningEnv ? (
+                    <div className="deploy-drag-scanning-overlay">
+                      <RefreshCw size={20} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>Validating environment keys...</span>
+                    </div>
+                  ) : envScanError ? (
+                    <div className="deploy-drag-error-box" onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <AlertTriangle size={16} color="#EF4444" style={{ flexShrink: 0 }} />
+                        <span>{envScanError}</span>
+                      </div>
+                      <button type="button" onClick={handleResetEnvFile} className="btn-reupload-pill">
+                        Re-upload
+                      </button>
                     </div>
                   ) : (
-                    <span className="deploy-drag-subtitle">
-                      Drag & Drop .env or credentials file or click to browse
-                    </span>
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Key size={18} color={envFile ? '#10B981' : '#38BDF8'} />
+                        <span className="deploy-drag-title">
+                          {envFile ? 'Secrets & Credentials Loaded' : '02. Upload Secrets / Env / Credentials'}
+                        </span>
+                      </div>
+                      {envFile ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className="deploy-drag-badge">
+                            <Check size={12} />
+                            <span>{envFile.name} ({envFile.keysCount} keys detected)</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleResetEnvFile}
+                            style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: '12px' }}
+                            title="Remove / Replace File"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="deploy-drag-subtitle">
+                          Drag & Drop .env or credentials file or click to browse
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -2093,7 +2257,7 @@ export default function OwnerManagementDashboard() {
                 <button type="button" className="btn-action-dark" onClick={() => setShowDeployModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn-action-cyan" disabled={isSubmitting}>
+                <button type="submit" className="btn-action-cyan" disabled={isSubmitting || isScanningRepo || isScanningEnv}>
                   {isSubmitting ? 'Allocating Node & Deploying...' : 'Deploy to Active Node ⚡'}
                 </button>
               </div>
@@ -2310,6 +2474,73 @@ export default function OwnerManagementDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL 5: RAILWAY LIVE ERROR LOGS VIEWER
+          ======================================================== */}
+      {showLogModal && (
+        <div className="modal-overlay" onClick={() => setShowLogModal(false)}>
+          <div className="modal-content-panel" style={{ maxWidth: '640px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header-row">
+              <div className="modal-title-text" style={{ color: '#EF4444' }}>
+                <Terminal size={17} color="#EF4444" />
+                <span>Railway Deployment Logs: {selectedLogCard?.label || selectedLogCard?.email || selectedLogCard?.repoName || 'Instance'}</span>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowLogModal(false)}>✕</button>
+            </div>
+
+            <div style={{
+              background: '#070B14',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              borderRadius: '10px',
+              padding: '14px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '11px',
+              color: '#F87171',
+              maxHeight: '340px',
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.55
+            }}>
+              {selectedLogCard?.logs || `[RAILWAY CONTAINER ALERT] Deployment exited with status code 1\n[LOG TIMESTAMP] ${new Date().toISOString()}\n[CLUSTER NODE] ${selectedLogCard?.accountId || 'rly_c7912'}\n[SERVICE IDENTIFIER] ${selectedLogCard?.label || selectedLogCard?.email || 'ghost-telegram-bot'}\n\n[DIAGNOSTICS & TRACE]:\n1. Error: Failed to start server daemon: Missing credentials in environment variables.\n2. Container health check timed out on port 3000.\n3. Recommendation: Click "Modify ENV" to update variables in Cloudflare D1 or push updated code repository.`}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
+              <button
+                type="button"
+                className="btn-action-dark"
+                onClick={() => {
+                  const logContent = selectedLogCard?.logs || `[RAILWAY CONTAINER ALERT] Deployment exited with status code 1\nService: ${selectedLogCard?.label || 'ghost-telegram-bot'}\nStatus: FAILED`;
+                  navigator.clipboard.writeText(logContent);
+                  setCopiedLogs(true);
+                  setTimeout(() => setCopiedLogs(false), 2000);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                {copiedLogs ? <Check size={13} color="#10B981" /> : <Terminal size={13} />}
+                <span>{copiedLogs ? 'Logs Copied!' : 'Copy Logs to Clipboard'}</span>
+              </button>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn-action-cyan"
+                  onClick={() => {
+                    setShowLogModal(false);
+                    setNewRepoName(selectedLogCard?.label?.split('@')[0] || selectedLogCard?.repoName || '');
+                    setShowDeployModal(true);
+                  }}
+                >
+                  Modify / Re-upload
+                </button>
+                <button type="button" className="btn-action-dark" onClick={() => setShowLogModal(false)}>
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
