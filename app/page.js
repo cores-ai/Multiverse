@@ -44,46 +44,8 @@ export default function OwnerManagementDashboard() {
   const [showConstellation, setShowConstellation] = useState(false);
 
   // Fleet data states (Synchronized with backend for zero hydration flash)
-  const [accounts, setAccounts] = useState([
-    {
-      accountId: 'rly_mu3p7xjk_sccd',
-      email: 'alexander4829@mailu.site',
-      repoName: 'alexander4829@mailu.site',
-      remainingCredits: 5.00,
-      activeProjectsCount: 1,
-      maxCapacity: 2,
-      status: 'active'
-    },
-    {
-      accountId: 'rly_mu3sbbrn_98y6',
-      email: 'priyasharma391@mailu.site',
-      repoName: 'priyasharma391@mailu.site',
-      remainingCredits: 5.00,
-      activeProjectsCount: 1,
-      maxCapacity: 2,
-      status: 'active'
-    }
-  ]);
-  const [repos, setRepos] = useState([
-    {
-      repoId: 'repo_alexander',
-      repoName: 'alexander4829@mailu.site',
-      assignedAccountId: 'rly_mu3p7xjk_sccd',
-      serviceType: 'HEAVY',
-      branch: 'main',
-      deploymentStatus: 'LIVE',
-      liveUrl: 'https://alexander.up.railway.app'
-    },
-    {
-      repoId: 'repo_priya',
-      repoName: 'priyasharma391@mailu.site',
-      assignedAccountId: 'rly_mu3sbbrn_98y6',
-      serviceType: 'LIGHT',
-      branch: 'main',
-      deploymentStatus: 'LIVE',
-      liveUrl: 'https://priyasharma.up.railway.app'
-    }
-  ]);
+  const [accounts, setAccounts] = useState([]);
+  const [repos, setRepos] = useState([]);
   const [logs, setLogs] = useState([
     {
       type: 'SYSTEM_BOOT',
@@ -470,54 +432,19 @@ export default function OwnerManagementDashboard() {
       // 2-second intentional pacing delay between tempmail generation and railway hit
       await new Promise(r => setTimeout(r, 2000));
 
-      // 3. Register Railway Account with this generated tempmail as its identity
-      const res = await fetch('/api/accounts', {
+      // 3. Trigger Railway Harvest Pipeline (Harvests OTP and API Token)
+      const res = await fetch('/api/railway/harvest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: tempEmail,
-          repoName: tempEmail,
-          apiToken: `railway_auto_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          initialCredits: 5.0
+          clusterName: tempEmail
         })
       });
       const data = await res.json();
-      if (data.success && data.account) {
-        setLatestCluster({
-          clusterName: tempEmail,
-          email: tempEmail,
-          accountId: data.account.accountId,
-          createdAt: new Date().toISOString(),
-          status: 'ACTIVE'
-        });
-
-        // Add to local state immediately for instant canvas card appearance
-        setAccounts(prev => {
-          if (prev.some(a => a.accountId === data.account.accountId)) return prev;
-          return [...prev, {
-            ...data.account,
-            email: tempEmail,
-            repoName: tempEmail,
-            remainingCredits: 5.00,
-            activeProjectsCount: 1,
-            maxCapacity: 2,
-            status: 'active'
-          }];
-        });
-
-        await fetch('/api/repos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            repoName: tempEmail,
-            serviceType: 'LIGHT',
-            assignedAccountId: data.account.accountId,
-            githubUrl: `https://github.com/iq4u8/${tempEmail.split('@')[0]}`,
-            envs: `SERVICE_NAME=${tempEmail}\nPORT=8080`
-          })
-        }).catch(() => {});
-        await fetchData();
-      }
+      console.log('[Cluster Generation Pipeline]', data);
+      
+      // Real card will appear via fetchData() automatically once Railway webhook confirms and writes to Cloudflare D1
+      await fetchData();
     } catch (e) {
       console.error('Failed to auto-add worker:', e);
     } finally {

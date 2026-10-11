@@ -27,49 +27,14 @@ export async function POST(request) {
         // 2-Second intentional pacing delay before initiating browser worker
         await new Promise(r => setTimeout(r, 2000));
 
-        // Generate account record
-        const accountId = `rly_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
-        const initialToken = `rly_tok_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
-
-        // Step 5 Preparation: Store directly in Cloudflare D1
-        await saveD1RailwayAccount({
-            account_id: accountId,
-            email: tempEmail,
-            api_token: initialToken,
-            status: 'INITIALIZING',
-            credits_remaining: 5.0,
-            days_left: 30,
-            repos_count: 0,
-            max_capacity: 2
-        }).catch(err => console.warn('D1 Account insert notice:', err.message));
-
-        // Also track repo deployment association in D1
-        if (clusterName) {
-            await saveD1RepoDeployment({
-                repo_name: clusterName,
-                account_id: accountId,
-                deployment_status: 'PROVISIONING',
-                live_url: null
-            }).catch(err => console.warn('D1 Deployment insert notice:', err.message));
-        }
-
-        // Also update local models for backward compatibility
-        try {
-            await createAccount({
-                email: tempEmail,
-                repoName: clusterName,
-                apiToken: initialToken,
-                initialCredits: 5.0,
-                status: 'active'
-            });
-            await createLog({
-                type: 'CLUSTER_GENERATION_INITIATED',
-                message: `JIT Cluster pipeline triggered for ${tempEmail} (${clusterName})`,
-                metadata: { email: tempEmail, accountId }
-            });
-        } catch (mErr) {
-            console.warn('Local DB sync notice:', mErr.message);
-        }
+        // DO NOT pre-create dummy card in D1! 
+        // Card will ONLY be created when Playwright harvests the actual Railway token and calls /api/webhooks/account-ready
+        console.log(`[JIT Pipeline] Harvest initiated for: ${tempEmail}. Waiting for live Railway verification...`);
+        await createLog({
+            type: 'CLUSTER_GENERATION_INITIATED',
+            message: `JIT Cluster pipeline triggered for ${tempEmail} (${clusterName})`,
+            metadata: { email: tempEmail, clusterName }
+        }).catch(() => {});
 
         // Step 2 & 3: Spawn Playwright Worker with HEADLESS=false
         try {
@@ -114,10 +79,10 @@ export async function POST(request) {
 
         return NextResponse.json({
             success: true,
-            accountId,
             email: tempEmail,
             clusterName,
             status: 'INITIALIZING',
+            message: 'Harvest worker launched. Card will be created in D1 once verified.',
             timestamp: new Date().toISOString()
         });
     } catch (err) {
