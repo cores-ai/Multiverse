@@ -424,10 +424,11 @@ export default function OwnerManagementDashboard() {
     }
   };
 
-  const handleDeleteAccount = async (id) => {
+  const handleDeleteAccount = async (id, email = null) => {
     try {
       setAccounts(prev => prev.filter(a => a.accountId !== id && a._id !== id && a.email !== id));
-      await fetch(`/api/accounts?accountId=${id}`, { method: 'DELETE' }).catch(() => {});
+      const q = email ? `accountId=${encodeURIComponent(id)}&email=${encodeURIComponent(email)}` : `accountId=${encodeURIComponent(id)}`;
+      await fetch(`/api/accounts?${q}`, { method: 'DELETE' }).catch(() => {});
       setTimeout(() => {
         fetchData();
       }, 400);
@@ -1078,8 +1079,8 @@ export default function OwnerManagementDashboard() {
               accounts={accounts}
               repos={repos}
               databaseAccounts={databaseAccounts}
-              githubCount={githubRepoCount || repos.length}
-              databaseCount={databaseAccounts.length || repos.length}
+              githubCount={githubRepoCount !== undefined ? githubRepoCount : repos.length}
+              databaseCount={databaseAccounts.length}
               deadCount={deadRepoCount}
               latestCluster={latestCluster}
               pingStatus={pingStatus}

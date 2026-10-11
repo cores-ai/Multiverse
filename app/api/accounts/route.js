@@ -91,18 +91,114 @@ export async function DELETE(request) {
     try {
         const { searchParams } = new URL(request.url);
         const accountId = searchParams.get('accountId');
+        const emailParam = searchParams.get('email');
 
         if (!accountId) {
             return NextResponse.json({ success: false, error: 'accountId is required' }, { status: 400 });
         }
 
-        // Delete from D1
-        await deleteD1RailwayAccount(accountId).catch(err => console.warn('D1 delete notice:', err.message));
+        // Find account in D1 to get email and token
+        let targetEmail = emailParam;
+        let apiToken = null;
+        try {
+            const d1Accounts = await getD1RailwayAccounts();
+            const found = (d1Accounts || []).find(a => 
+                a.account_id === accountId || 
+                a.accountId === accountId || 
+                a.email === accountId || 
+                (emailParam && a.email === emailParam)
+            );
+            if (found) {
+                targetEmail = targetEmail || found.email;
+                apiToken = found.api_token || found.apiToken;
+            }
+        } catch (e) {}
 
-        // Delete from local
+        // 1. If API Token exists, clean up any Railway projects via GraphQL
+        if (apiToken) {
+            try {
+                const gqlRes = await fetch('https://backboard.railway.com/graphql/v2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiToken}`
+                    },
+                    body: JSON.stringify({
+                        query: `query { projects { edges { node { id } } } }`
+                    })
+                });
+                const gqlData = await gqlRes.json();
+                const projects = gqlData?.data?.projects?.edges || [];
+                for (const edge of projects) {
+                    const pid = edge.node?.id;
+                    if (pid) {
+                        await fetch('https://backboard.railway.com/graphql/v2', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${apiToken}`
+                            },
+                            body: JSON.stringify({
+                                query: `mutation DeleteProject($id: String!) { projectDelete(id: $id) }`,
+                                variables: { id: pid }
+                            })
+                        }).catch(() => {});
+                    }
+                }
+            } catch (gqlErr) {
+                console.warn('Railway project cleanup note:', gqlErr.message);
+            }
+        }
+
+        // 2. Launch autonomous Railway account deletion worker if email is present
+        if (targetEmail) {
+            try {
+                const { spawn } = await import('child_process');
+                const path = await import('path');
+                const fs = await import('fs');
+
+                const possibleDirs = [
+                    path.resolve(process.cwd(), '..', 'Rilway Server'),
+                    path.resolve(process.cwd(), 'railway-worker'),
+                    path.resolve(process.cwd(), '..', 'railway-worker')
+                ];
+
+                let workerDir = null;
+                let workerScript = null;
+
+                for (const d of possibleDirs) {
+                    const s = path.join(d, 'delete_worker.js');
+                    if (fs.existsSync(s)) {
+                        workerDir = d;
+                        workerScript = s;
+                        break;
+                    }
+                }
+
+                if (workerScript) {
+                    console.log(`🚀 [Multiverse Delete] Spawning Railway account deleter for: ${targetEmail}`);
+                    const delProc = spawn(process.execPath, [workerScript, targetEmail], {
+                        cwd: workerDir,
+                        detached: true,
+                        stdio: 'ignore',
+                        env: {
+                            ...process.env,
+                            TARGET_EMAIL: targetEmail,
+                            HEADLESS: 'true'
+                        }
+                    });
+                    delProc.unref();
+                }
+            } catch (delSpawnErr) {
+                console.warn('Autonomous deletion spawn error:', delSpawnErr.message);
+            }
+        }
+
+        // 3. Delete from D1 and local DB
+        await deleteD1RailwayAccount(accountId).catch(err => console.warn('D1 delete notice:', err.message));
         await deleteAccount(accountId).catch(() => {});
 
-        return NextResponse.json({ success: true, deleted: accountId });
+        return NextResponse.json({ success: true, deleted: accountId, email: targetEmail });
     } catch (e) {
         console.error('DELETE /api/accounts error:', e.message);
         return NextResponse.json({ success: false, error: e.message }, { status: 500 });

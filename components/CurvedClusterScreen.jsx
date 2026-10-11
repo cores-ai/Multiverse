@@ -257,7 +257,7 @@ export default function CurvedClusterScreen({
             <span style={{ color: '#94A3B8', fontWeight: 600 }}>database :</span>
             <span style={{ color: '#C084FC', fontWeight: 800, background: 'rgba(192, 132, 252, 0.1)', padding: '1px 5px', borderRadius: '3px', border: '1px solid rgba(192, 132, 252, 0.25)' }}>
               {(() => {
-                const cnt = (repos && repos.length > 0) ? (databaseCount || repos.length) : (databaseAccounts && databaseAccounts.length > 0 ? databaseAccounts.length : 0);
+                const cnt = typeof databaseCount === 'number' ? databaseCount : (databaseAccounts && databaseAccounts.length > 0 ? databaseAccounts.length : 0);
                 return cnt < 10 ? `0${cnt}` : `${cnt}`;
               })()}
             </span>

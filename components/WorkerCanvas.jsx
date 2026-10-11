@@ -336,7 +336,8 @@ export default function WorkerCanvas({
     }
   };
 
-  const handleDeleteCluster = async (targetId) => {
+  const handleDeleteCluster = async (targetId, targetEmail = null) => {
+    if (!targetId) return;
     try {
       setEditingCardId(null);
       // Immediately and aggressively remove from local canvas state
@@ -350,9 +351,10 @@ export default function WorkerCanvas({
       });
 
       if (onDeleteNode) {
-        await onDeleteNode(targetId);
+        await onDeleteNode(targetId, targetEmail);
       } else {
-        await fetch(`/api/accounts?accountId=${targetId}`, { method: 'DELETE' }).catch(() => {});
+        const q = targetEmail ? `accountId=${encodeURIComponent(targetId)}&email=${encodeURIComponent(targetEmail)}` : `accountId=${encodeURIComponent(targetId)}`;
+        await fetch(`/api/accounts?${q}`, { method: 'DELETE' }).catch(() => {});
         if (onRefresh) onRefresh();
       }
     } catch (e) {
@@ -668,7 +670,7 @@ export default function WorkerCanvas({
                     className="card-edit-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDeleteCluster(acc.accountId || acc._id || id);
+                      handleDeleteCluster(acc.accountId || acc._id || id, acc.email);
                     }}
                     title="Delete Worker Node"
                     style={{ color: '#EF4444' }}
@@ -731,7 +733,7 @@ export default function WorkerCanvas({
                     className="edit-panel-delete-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDeleteCluster(acc.accountId || acc._id || id);
+                      handleDeleteCluster(acc.accountId || acc._id || id, acc.email);
                     }}
                   >
                     <Trash2 size={13} />
