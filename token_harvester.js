@@ -161,46 +161,59 @@ async function deleteCurrentRailwayAccount(page, email) {
     if (!email) throw new Error('Account email is required for deletion confirmation');
 
     console.log(`🗑️ [Account Deleter] Navigating to Railway account settings for ${email}...`);
-    await page.goto('https://railway.com/account', { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await new Promise(r => setTimeout(r, 2500));
+    // Railway danger zone is inside General settings (/account or /account/general)
+    await page.goto('https://railway.com/account', { waitUntil: 'domcontentloaded', timeout: 35000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 2000));
     await handleRailwayTermsOfService(page).catch(() => {});
 
-    // Scroll all the way down to Danger Zone (both window and scrollable divs)
-    console.log('📜 [Account Deleter] Scrolling down to Danger Zone...');
-    for (let scrollAttempt = 0; scrollAttempt < 4; scrollAttempt++) {
+    // Retry loop for finding Delete Account button (up to 30s)
+    console.log('🔍 [Account Deleter] Locating Delete Account button in Danger Zone...');
+    let deleteBtn = null;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < 30000) {
+        // 1. Scroll everything down
         await page.evaluate(() => {
             window.scrollTo(0, document.body.scrollHeight);
             document.querySelectorAll('*').forEach(el => {
-                if (el.scrollHeight > el.clientHeight) {
+                if (el.scrollHeight > el.clientHeight && el.clientHeight > 50) {
                     el.scrollTop = el.scrollHeight;
                 }
             });
         }).catch(() => {});
-        await new Promise(r => setTimeout(r, 600));
-    }
 
-    // Look for Delete Account button in Danger Zone
-    console.log('🔍 [Account Deleter] Locating Delete Account button...');
-    let deleteBtn = null;
-    const deleteSelectors = [
-        'button:has-text("Delete Account")',
-        'button:has-text("Delete account")',
-        '[data-testid*="delete-account"]',
-        'button[class*="danger"]',
-        'button[class*="destructive"]'
-    ];
+        // 2. Check if we are on tokens/billing and need to click "General" tab
+        const currentUrl = page.url();
+        if (currentUrl.includes('/tokens') || currentUrl.includes('/billing') || currentUrl.includes('/preferences')) {
+            await page.evaluate(() => {
+                const links = Array.from(document.querySelectorAll('a, button'));
+                const gen = links.find(l => (l.innerText || '').trim().toLowerCase() === 'general');
+                if (gen) gen.click();
+            }).catch(() => {});
+        }
 
-    for (const sel of deleteSelectors) {
-        try {
-            const loc = page.locator(sel).last();
-            if (await loc.count() > 0 && await loc.isVisible()) {
-                deleteBtn = loc;
-                break;
-            }
-        } catch (e) {}
-    }
+        // 3. Check for Delete Account button with selectors
+        const deleteSelectors = [
+            'button:has-text("Delete Account")',
+            'button:has-text("Delete account")',
+            'button:has-text("Delete My Account")',
+            '[data-testid*="delete-account"]',
+            'button[class*="danger"]',
+            'button[class*="destructive"]'
+        ];
 
-    if (!deleteBtn) {
+        for (const sel of deleteSelectors) {
+            try {
+                const loc = page.locator(sel).last();
+                if (await loc.count() > 0 && await loc.isVisible()) {
+                    deleteBtn = loc;
+                    break;
+                }
+            } catch (e) {}
+        }
+        if (deleteBtn) break;
+
+        // 4. Check DOM evaluate for button with "delete account" text
         const found = await page.evaluate(() => {
             const btns = Array.from(document.querySelectorAll('button'));
             const b = btns.reverse().find(btn => (btn.innerText || '').toLowerCase().includes('delete account'));
@@ -211,10 +224,42 @@ async function deleteCurrentRailwayAccount(page, email) {
             return false;
         }).catch(() => false);
 
-        if (!found) {
-            throw new Error('Could not find "Delete Account" button in Danger Zone.');
+        if (found) {
+            deleteBtn = page.locator('button:has-text("Delete Account"), button:has-text("Delete account")').last();
+            break;
         }
-        deleteBtn = page.locator('button:has-text("Delete Account")').last();
+
+        // If not found yet and 10s elapsed, also try navigating directly to /account/general
+        if (Date.now() - startTime > 10000 && !currentUrl.includes('/general')) {
+            await page.goto('https://railway.com/account/general', { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+        }
+
+        await new Promise(r => setTimeout(r, 1200));
+    }
+
+    if (!deleteBtn) {
+        console.warn('⚠️ [Account Deleter] UI Delete button not found in DOM, falling back to direct GraphQL userDelete...');
+        const directResult = await page.evaluate(async () => {
+            try {
+                const res = await fetch('https://backboard.railway.com/graphql/v2', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ query: 'mutation DeleteMyUser { userDelete }' })
+                });
+                return await res.json();
+            } catch (e) {
+                return { error: e.message };
+            }
+        }).catch(err => ({ error: err.message }));
+
+        if (directResult?.data?.userDelete === true) {
+            console.log(`🎉 [Account Deleter] Direct GraphQL userDelete succeeded for ${email}!`);
+            await page.context().clearCookies().catch(() => {});
+            return true;
+        }
+
+        throw new Error('Could not find "Delete Account" button in Danger Zone and direct GraphQL deletion was rejected.');
     }
 
     await deleteBtn.scrollIntoViewIfNeeded().catch(() => {});

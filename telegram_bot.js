@@ -1113,6 +1113,7 @@ async function processEmailAndRequestOTP(chat, msgId, email) {
         }
 
         // Step 3: Click Continue with Email
+        const emailSentTime = Date.now() - 3000;
         await session.page.evaluate(async () => {
             for (let i = 0; i < 20; i++) {
                 const btn = Array.from(document.querySelectorAll('button')).find(b =>
@@ -1136,7 +1137,7 @@ async function processEmailAndRequestOTP(chat, msgId, email) {
             (async () => {
                 try {
                     console.log(`[Auto OTP] Polling Mailu for ${email}...`);
-                    const rawOtp = await fetchRawOtp(email, 45);
+                    const rawOtp = await fetchRawOtp(email, 45, emailSentTime);
                     const cleanCode = (rawOtp || '').match(/\d{6}/)?.[0] || (rawOtp || '').trim();
                     if (cleanCode && /^\d{6}$/.test(cleanCode) && session.state === 'WAITING_OTP') {
                         console.log(`[Auto OTP] Auto-received OTP: ${cleanCode}`);

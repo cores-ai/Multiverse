@@ -105,14 +105,31 @@ async function ensureMailbox(cleanInbox) {
     return inboxTokenMap.get(cleanInbox) || null;
 }
 
+async function flushInbox(cleanInbox) {
+    try {
+        const token = await ensureMailbox(cleanInbox);
+        if (token) {
+            await fetch(`https://mailu.site/api/v1/inbox`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            }).catch(() => {});
+            // Re-ensure mailbox immediately so it's ready for new incoming emails
+            await ensureMailbox(cleanInbox).catch(() => {});
+        }
+    } catch (e) {
+        console.warn(`[TempMail] flushInbox note for ${cleanInbox}:`, e.message);
+    }
+}
+
 /**
  * Polls for OTP from the live mailu.site messages
  * Uses the new v1 Instant OTP API with automatic mailbox revival
  * @param {string} inbox - Target email address (e.g. user@mailu.site)
  * @param {number} timeout - Polling timeout in seconds (default: 45)
+ * @param {number} minTimestamp - Optional minimum timestamp (ms) to ignore older OTPs
  * @returns {Promise<string>} 6-digit OTP code
  */
-async function fetchRawOtp(inbox, timeout = 45) {
+async function fetchRawOtp(inbox, timeout = 45, minTimestamp = 0) {
     if (!inbox) throw new Error('Inbox parameter is required');
     const cleanInbox = inbox.trim().toLowerCase();
     
@@ -122,23 +139,28 @@ async function fetchRawOtp(inbox, timeout = 45) {
         token = inboxTokenMap.get(cleanInbox);
     }
 
-    console.log(`[TempMail] Live polling messages for ${cleanInbox} (timeout: ${timeout}s)...`);
+    console.log(`[TempMail] Live polling messages for ${cleanInbox} (timeout: ${timeout}s, minTimestamp: ${minTimestamp})...`);
     const startTime = Date.now();
     const maxDuration = timeout * 1000;
+    const sinceParam = minTimestamp > 0 ? `&since=${minTimestamp}` : '';
 
     while (Date.now() - startTime < maxDuration) {
-        // Try v1 instant OTP endpoint
+        // Try v1 instant OTP endpoint with since parameter
         if (token) {
             try {
-                const otpRes = await fetch(`https://mailu.site/api/v1/inbox/otp?timeout=2`, {
+                const otpRes = await fetch(`https://mailu.site/api/v1/inbox/otp?timeout=2${sinceParam}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (otpRes.ok) {
                     const otpData = await otpRes.json();
                     if (otpData.success && otpData.otp && /^\d{6}$/.test(String(otpData.otp).trim())) {
                         const code = String(otpData.otp).trim();
-                        console.log(`✅ [TempMail] Successfully extracted OTP via v1 API: ${code}`);
-                        return code;
+                        // Validate timestamp if returned
+                        const msgTime = otpData.message?.received_at || 0;
+                        if (!minTimestamp || msgTime >= minTimestamp) {
+                            console.log(`✅ [TempMail] Successfully extracted fresh OTP via v1 API: ${code}`);
+                            return code;
+                        }
                     }
                 } else if (otpRes.status === 401) {
                     console.warn(`⚠️ [TempMail] Token unauthorized, re-ensuring mailbox for ${cleanInbox}...`);
@@ -155,21 +177,68 @@ async function fetchRawOtp(inbox, timeout = 45) {
                 const listRes = await fetch(`${MAILU_BASE_URL}/messages`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+function extractOtpFromMessage(detail) {
+    if (!detail) return null;
+    const subject = String(detail.subject || '');
+    const snippet = String(detail.snippet || '');
+    const textBody = String(detail.text_body || '');
+    let htmlBody = String(detail.html_body || '');
+
+    // 1. Subject is the cleanest and most authoritative (zero CSS styling)
+    const subjectMatch = subject.match(/\b([0-9]{6})\b/);
+    if (subjectMatch) return subjectMatch[1];
+
+    // 2. Check Snippet and Text Body with context keywords
+    for (const text of [snippet, textBody]) {
+        if (!text) continue;
+        const contextMatch = text.match(/(?:code|verification|login|token|pin)\s*(?:is|:)?\s*([0-9]{6})\b/i);
+        if (contextMatch) return contextMatch[1];
+    }
+
+    // 3. Standalone 6-digit in clean text (non-HTML)
+    for (const text of [snippet, textBody]) {
+        if (!text) continue;
+        const rawMatch = text.match(/\b([0-9]{6})\b/);
+        if (rawMatch) return rawMatch[1];
+    }
+
+    // 4. HTML Body: MUST strip CSS styles and hex color codes (#333333, etc.) first!
+    if (htmlBody) {
+        let cleanHtml = htmlBody
+            .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+            .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+            .replace(/#[0-9a-fA-F]{3,8}\b/gi, ' ') // Strip hex codes like #333333
+            .replace(/rgb\([^)]+\)/gi, ' ')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/&[a-z0-9#]+;/gi, ' ');
+
+        const htmlContextMatch = cleanHtml.match(/(?:code|verification|login|token|pin)\s*(?:is|:)?\s*([0-9]{6})\b/i);
+        if (htmlContextMatch) return htmlContextMatch[1];
+
+        const htmlMatch = cleanHtml.match(/\b([0-9]{6})\b/);
+        if (htmlMatch) return htmlMatch[1];
+    }
+
+    return null;
+}
+
                 if (listRes.ok) {
                     const listData = await listRes.json();
                     const messages = Array.isArray(listData.messages) ? listData.messages : [];
                     for (const msg of messages) {
+                        const msgTime = msg.received_at || 0;
+                        if (minTimestamp && msgTime < minTimestamp) continue;
+
                         try {
                             const detailRes = await fetch(`${MAILU_BASE_URL}/messages/${msg.id}`, {
                                 headers: { 'Authorization': `Bearer ${token}` }
                             });
                             if (detailRes.ok) {
                                 const detail = await detailRes.json();
-                                const fullText = `${detail.subject || ''} ${detail.snippet || ''} ${detail.text_body || ''} ${detail.html_body || ''}`;
-                                const match = fullText.match(/\b\d{6}\b/);
-                                if (match) {
-                                    console.log(`✅ [TempMail] Successfully extracted OTP from message: ${match[0]}`);
-                                    return match[0];
+                                const code = extractOtpFromMessage(detail);
+                                if (code) {
+                                    console.log(`✅ [TempMail] Successfully extracted fresh OTP from message: ${code}`);
+                                    return code;
                                 }
                             }
                         } catch (detailErr) {}
@@ -188,6 +257,7 @@ module.exports = {
     generateTempEmail,
     fetchRawOtp,
     ensureMailbox,
+    flushInbox,
     inboxTokenMap
 };
 

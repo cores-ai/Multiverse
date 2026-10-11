@@ -55,6 +55,20 @@ export default function WorkerCanvas({
     return () => clearTimeout(timer);
   }, []);
 
+  // Autonomous Train Trigger: Automatically runs when repo or env is uploaded/updated from backend
+  const prevCountRef = useRef({ accs: (accounts || []).length, repos: (repos || []).length });
+  useEffect(() => {
+    const prev = prevCountRef.current;
+    const curAccs = (accounts || []).length;
+    const curRepos = (repos || []).length;
+    if (curRepos > prev.repos) {
+      dispatchTrain('left');
+    } else if (curAccs > prev.accs) {
+      dispatchTrain('right');
+    }
+    prevCountRef.current = { accs: curAccs, repos: curRepos };
+  }, [accounts, repos, dispatchTrain]);
+
   // Edit Panel State
   const [editingCardId, setEditingCardId] = useState(null);
 
@@ -887,20 +901,15 @@ export default function WorkerCanvas({
       {/* 5. Left-Side Train Portal (Mountain on Left, Arch Mouth Facing Right with tracks emerging) */}
       <div 
         className="left-tunnel-portal-fixture"
-        onClick={() => {
-          dispatchTrain('left');
-          if (onAddRepo) onAddRepo();
-          else if (onAddAccount) onAddAccount();
-        }}
-        title="Add GitHub API (Dispatches Train to Left Tunnel)"
+        title="GitHub Gateway (Autonomous Pipeline)"
         style={{
           position: 'absolute',
           top: '-20px',
           left: '0px',
           width: '44px',
           zIndex: 44,
-          cursor: 'pointer',
-          pointerEvents: 'auto',
+          cursor: 'default',
+          pointerEvents: 'none',
           overflow: 'visible',
           background: 'transparent',
           userSelect: 'none'
@@ -909,13 +918,11 @@ export default function WorkerCanvas({
         <img 
           src="/perfect_left_side_tunnel.png" 
           alt="Left mountain portal facing eastward along railway tracks"
-          className="tunnel-clickable-img"
           style={{
             width: '100%',
             height: 'auto',
             display: 'block',
-            filter: 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.8))',
-            transition: 'filter 0.2s ease, transform 0.15s ease'
+            filter: 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.8))'
           }}
         />
 
@@ -931,8 +938,8 @@ export default function WorkerCanvas({
             fontWeight: 600,
             letterSpacing: '0.04em',
             color: 'rgba(255, 255, 255, 0.65)',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
+            cursor: 'default',
+            pointerEvents: 'none',
             display: 'flex',
             alignItems: 'center',
             gap: '2px',
@@ -946,11 +953,7 @@ export default function WorkerCanvas({
       {/* 6. Center Double-Opening Mountain Tunnel (Real Grey Rock with Cracks & Dual Sideways Caverns) */}
       <div 
         className="center-tunnel-portal-fixture"
-        onClick={() => {
-          dispatchTrain('right');
-          handleGenerateCluster();
-        }}
-        title="Click Tunnel or Text to Generate Cluster (Dispatches Train to Right Tunnel)"
+        title="Cluster Core (Autonomous Pipeline - Triggered on Repo/ENV Upload)"
         style={{
           position: 'absolute',
           top: '-20px',
@@ -958,8 +961,8 @@ export default function WorkerCanvas({
           transform: 'translateX(-50%)',
           width: '95px',
           zIndex: 44,
-          cursor: 'pointer',
-          pointerEvents: 'auto',
+          cursor: 'default',
+          pointerEvents: 'none',
           overflow: 'visible',
           background: 'transparent',
           display: 'flex',
@@ -971,13 +974,11 @@ export default function WorkerCanvas({
         <img 
           src="/perfect_center_mountain_dual.png" 
           alt="Center mountain tunnel with dual sideways portals"
-          className="tunnel-clickable-img"
           style={{
             width: '100%',
             height: 'auto',
             display: 'block',
-            filter: 'drop-shadow(0 2px 10px rgba(0, 0, 0, 0.9))',
-            transition: 'filter 0.2s ease, transform 0.15s ease'
+            filter: 'drop-shadow(0 2px 10px rgba(0, 0, 0, 0.9))'
           }}
         />
 
@@ -992,8 +993,8 @@ export default function WorkerCanvas({
             fontWeight: 600,
             letterSpacing: '0.04em',
             color: isGenerating ? '#00F0FF' : 'rgba(255, 255, 255, 0.65)',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
+            cursor: 'default',
+            pointerEvents: 'none',
             display: 'flex',
             alignItems: 'center',
             gap: '2px',
@@ -1005,10 +1006,7 @@ export default function WorkerCanvas({
               {clusterStepText || `Processing ${genProgress}%`}
             </span>
           ) : (
-            <>
-              <span style={{ fontSize: '7.5px', color: '#00F0FF', fontWeight: 700, lineHeight: 1 }}>+</span>
-              <span>Generate Cluster</span>
-            </>
+            <span>Cluster Core</span>
           )}
         </div>
       </div>
@@ -1016,19 +1014,15 @@ export default function WorkerCanvas({
       {/* 7. Right-Side Train Portal (Mountain on Right, Arch Mouth Facing Left with tracks emerging) */}
       <div 
         className="right-tunnel-portal-fixture"
-        onClick={() => {
-          dispatchTrain('right');
-          if (onAddAccount) onAddAccount();
-        }}
-        title="Add Railway Server (Dispatches Train to Right Tunnel)"
+        title="Railway Server Fleet (Autonomous Pipeline)"
         style={{
           position: 'absolute',
           top: '-20px',
           right: '0px',
           width: '44px',
           zIndex: 44,
-          cursor: 'pointer',
-          pointerEvents: 'auto',
+          cursor: 'default',
+          pointerEvents: 'none',
           overflow: 'visible',
           background: 'transparent',
           userSelect: 'none'
@@ -1037,13 +1031,11 @@ export default function WorkerCanvas({
         <img 
           src="/perfect_right_side_tunnel.png" 
           alt="Right mountain portal facing westward along railway tracks"
-          className="tunnel-clickable-img"
           style={{
             width: '100%',
             height: 'auto',
             display: 'block',
-            filter: 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.8))',
-            transition: 'filter 0.2s ease, transform 0.15s ease'
+            filter: 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.8))'
           }}
         />
 
@@ -1059,8 +1051,8 @@ export default function WorkerCanvas({
             fontWeight: 600,
             letterSpacing: '0.04em',
             color: 'rgba(255, 255, 255, 0.65)',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
+            cursor: 'default',
+            pointerEvents: 'none',
             display: 'flex',
             alignItems: 'center',
             gap: '2px',

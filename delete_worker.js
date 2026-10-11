@@ -14,7 +14,7 @@ const fs = require('fs');
 const spoofConfig = require('./spoof_config');
 const { generateStealthScript } = require('./stealth_injections');
 const { handleRailwayTermsOfService, deleteCurrentRailwayAccount } = require('./token_harvester');
-const { fetchRawOtp } = require('./tempmail_client');
+const { fetchRawOtp, flushInbox } = require('./tempmail_client');
 
 async function runAutonomousDeletion(email, options = {}) {
     if (!email) {
@@ -26,6 +26,9 @@ async function runAutonomousDeletion(email, options = {}) {
     }
     const { manualOtp = null, onOtpPrompt = null } = options;
     console.log(`🗑️ [Delete Worker] Starting autonomous Railway account deletion for: ${email}`);
+
+    // Flush old stale messages from the inbox so old expired OTPs don't get picked up
+    await flushInbox(email).catch(() => {});
 
     const isHeadless = process.env.HEADLESS === 'true';
     const contextOptions = {
@@ -114,26 +117,107 @@ async function runAutonomousDeletion(email, options = {}) {
             await new Promise(r => setTimeout(r, 4000));
         }
 
-        // Step 5: Click Continue with email
-        await page.evaluate(async () => {
-            for (let i = 0; i < 20; i++) {
+        // Step 5: Click Continue with email and wait for PIN screen transition
+        console.log('📨 [Delete Worker] Submitting email to Railway...');
+        let emailSubmitted = false;
+        const emailSentTime = Date.now() - 3000;
+
+        for (let waitBtn = 0; waitBtn < 30; waitBtn++) {
+            // Check if Turnstile retry is needed
+            const isBtnEnabled = await page.evaluate(() => {
                 const btn = Array.from(document.querySelectorAll('button')).find(b =>
                     (b.innerText || '').trim().toLowerCase().includes('continue with email'));
-                if (btn && !btn.disabled) { btn.click(); return true; }
-                await new Promise(r => setTimeout(r, 500));
-            }
-        }).catch(() => {});
+                return btn && !btn.disabled;
+            }).catch(() => false);
 
-        // Step 6: Fetch OTP from Mailu API or prompt
-        console.log(`📬 [Delete Worker] Fetching OTP for ${email}...`);
+            if (!isBtnEnabled && turnstileBox && waitBtn % 5 === 0 && waitBtn > 0) {
+                console.log('🔄 [Delete Worker] Retrying Turnstile click...');
+                const clickX = turnstileBox.x + 28;
+                const clickY = turnstileBox.y + (turnstileBox.height / 2);
+                await page.mouse.move(clickX, clickY, { steps: 5 }).catch(() => {});
+                await page.mouse.down().catch(() => {});
+                await new Promise(r => setTimeout(r, 100));
+                await page.mouse.up().catch(() => {});
+            }
+
+            // Click Continue with email
+            const clicked = await page.evaluate(() => {
+                const btn = Array.from(document.querySelectorAll('button')).find(b =>
+                    (b.innerText || '').trim().toLowerCase().includes('continue with email'));
+                if (btn && !btn.disabled) {
+                    btn.click();
+                    return true;
+                }
+                return false;
+            }).catch(() => false);
+
+            if (clicked) {
+                emailSubmitted = true;
+                console.log('✅ [Delete Worker] Clicked "Continue with email" button.');
+                break;
+            }
+
+            // Fallback Playwright click
+            const pBtn = page.locator('button:has-text("Continue with email")').first();
+            if (await pBtn.isEnabled({ timeout: 500 }).catch(() => false)) {
+                await pBtn.click({ force: true }).catch(() => {});
+                emailSubmitted = true;
+                console.log('✅ [Delete Worker] Clicked "Continue with email" via Playwright locator.');
+                break;
+            }
+
+            await new Promise(r => setTimeout(r, 800));
+        }
+
+        // Wait for PIN code inputs to appear on screen
+        console.log('⏳ [Delete Worker] Waiting for Railway OTP PIN screen to appear...');
+        let targetFrame = page;
+        let otpScreenReady = false;
+
+        for (let pWait = 0; pWait < 40; pWait++) {
+            const frames = [page, ...page.frames()];
+            for (const frame of frames) {
+                try {
+                    if (await frame.locator('#pin-code-input-0, input[data-testid="pin-input-0"]').count() > 0) {
+                        targetFrame = frame;
+                        otpScreenReady = true;
+                        break;
+                    }
+                } catch (e) {}
+            }
+            if (otpScreenReady) break;
+
+            const domPin = await page.evaluate(() => {
+                return !!(document.querySelector('#pin-code-input-0') || document.querySelector('input[autocomplete="one-time-code"]'));
+            }).catch(() => false);
+            if (domPin) {
+                otpScreenReady = true;
+                break;
+            }
+
+            await new Promise(r => setTimeout(r, 500));
+        }
+
+        if (!otpScreenReady) {
+            console.warn('⚠️ [Delete Worker] PIN fields not detected yet, attempting re-click on Continue with email...');
+            await page.evaluate(() => {
+                const btn = Array.from(document.querySelectorAll('button')).find(b =>
+                    (b.innerText || '').trim().toLowerCase().includes('continue with email'));
+                if (btn) btn.click();
+            }).catch(() => {});
+            await new Promise(r => setTimeout(r, 2000));
+        }
+
+        // Step 6: Fetch OTP from Mailu API or prompt (now guaranteed that PIN screen is active)
+        console.log(`📬 [Delete Worker] Fetching fresh OTP for ${email}...`);
         let otp = manualOtp ? manualOtp.match(/\d{6}/)?.[0] : null;
 
         if (!otp) {
             try {
-                const rawOtp = await fetchRawOtp(email, 25);
+                const rawOtp = await fetchRawOtp(email, 25, emailSentTime);
                 otp = (rawOtp || '').match(/\d{6}/)?.[0];
             } catch (otpErr) {
-                console.warn(`⚠️ [Delete Worker] Auto OTP fetch not ready: ${otpErr.message}`);
+                console.warn(`⚠️ [Delete Worker] Auto OTP fetch note: ${otpErr.message}`);
                 if (typeof onOtpPrompt === 'function') {
                     console.log('⏳ [Delete Worker] Waiting for manual OTP input...');
                     otp = await onOtpPrompt(email);
@@ -143,93 +227,108 @@ async function runAutonomousDeletion(email, options = {}) {
         }
 
         if (!otp) throw new Error(`Could not obtain 6-digit OTP for ${email}`);
-        console.log(`🔑 [Delete Worker] Got OTP: ${otp}`);
+        console.log(`🔑 [Delete Worker] Got fresh valid OTP: ${otp}`);
 
-        // Step 7: Enter OTP with ultra-resilient multi-fallback detection & typing
-        let targetFrame = page;
-        let otpFound = false;
-
-        for (let attempt = 0; attempt < 50; attempt++) {
-            const frames = [page, ...page.frames()];
-            for (const frame of frames) {
-                try {
-                    const hasPin0 = await frame.locator('#pin-code-input-0, input[data-testid="pin-input-0"]').count() > 0;
-                    if (hasPin0) {
-                        targetFrame = frame;
-                        otpFound = true;
-                        break;
-                    }
-                } catch (e) {}
-            }
-            if (otpFound) break;
-
-            // Also check for any 6 pin inputs via querySelector
-            const domPin = await page.evaluate(() => {
-                return !!(document.querySelector('#pin-code-input-0') || document.querySelector('input[autocomplete="one-time-code"]'));
-            }).catch(() => false);
-            if (domPin) {
-                otpFound = true;
-                break;
-            }
-
-            await new Promise(r => setTimeout(r, 500));
-        }
-
-        if (!otpFound) {
-            throw new Error('OTP input fields not found. The Railway login modal may not have finished transitioning.');
-        }
-
-        console.log(`✍️ [Delete Worker] Typing OTP: ${otp}...`);
+        // Step 7: Enter OTP with multi-strategy autofill
+        console.log(`✍️ [Delete Worker] Auto-filling OTP: ${otp}...`);
         let filledSuccess = false;
 
-        // Method A: In-page DOM injection (instant & immune to overlay/pointer-events blocks)
+        // Method A: Click first pin input and use keyboard type with human delay (triggers all react listeners)
         try {
-            filledSuccess = await page.evaluate((code) => {
-                let success = false;
-                const pin0 = document.querySelector('#pin-code-input-0');
-                if (pin0) {
+            const firstInput = targetFrame.locator('#pin-code-input-0, input[data-testid="pin-input-0"]').first();
+            if (await firstInput.isVisible({ timeout: 4000 }).catch(() => false)) {
+                await firstInput.scrollIntoViewIfNeeded().catch(() => {});
+                await firstInput.click({ force: true }).catch(() => {});
+                await new Promise(r => setTimeout(r, 200));
+                await page.keyboard.type(otp, { delay: 90 });
+                filledSuccess = true;
+                console.log('✅ [Delete Worker] OTP entered via Playwright keyboard typing.');
+            }
+        } catch (keyErr) {
+            console.log('⚠️ Keyboard typing note:', keyErr.message);
+        }
+
+        // Method B: In-page DOM injection with native setter
+        if (!filledSuccess) {
+            try {
+                filledSuccess = await page.evaluate((code) => {
+                    const pin0 = document.querySelector('#pin-code-input-0');
+                    if (!pin0) return false;
                     pin0.focus();
+                    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
                     for (let i = 0; i < 6; i++) {
                         const input = document.querySelector(`#pin-code-input-${i}`);
                         if (input) {
                             input.focus();
-                            input.value = code[i];
+                            if (nativeSetter) {
+                                nativeSetter.call(input, code[i]);
+                            } else {
+                                input.value = code[i];
+                            }
                             input.dispatchEvent(new Event('input', { bubbles: true }));
                             input.dispatchEvent(new Event('change', { bubbles: true }));
-                            success = true;
+                            input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
                         }
                     }
-                }
-                return success;
-            }, otp);
-        } catch (domErr) {
-            console.log('⚠️ DOM direct OTP set note:', domErr.message);
-        }
-
-        // Method B: Playwright keyboard type if DOM method didn't trigger auto-submit
-        if (!filledSuccess) {
-            try {
-                const firstInput = targetFrame.locator('#pin-code-input-0, input[data-testid="pin-input-0"]').first();
-                await firstInput.scrollIntoViewIfNeeded().catch(() => {});
-                await firstInput.click({ timeout: 5000, force: true }).catch(() => {});
-                await page.keyboard.type(otp, { delay: 100 });
-                filledSuccess = true;
-            } catch (clickErr) {
-                console.log('⚠️ Keyboard typing note:', clickErr.message);
+                    return true;
+                }, otp).catch(() => false);
+                if (filledSuccess) console.log('✅ [Delete Worker] OTP entered via native DOM injection.');
+            } catch (domErr) {
+                console.log('⚠️ DOM injection note:', domErr.message);
             }
         }
 
-        // Method C: Digit-by-digit locator fill with force
+        // Method C: Digit-by-digit locator fill
         if (!filledSuccess) {
             for (let i = 0; i < 6; i++) {
                 const digitInput = targetFrame.locator(`#pin-code-input-${i}`).first();
+                await digitInput.click({ force: true }).catch(() => {});
                 await digitInput.fill(otp[i], { timeout: 3000, force: true }).catch(() => {});
                 await new Promise(r => setTimeout(r, 80));
             }
         }
 
-        console.log('✅ [Delete Worker] OTP entered successfully. Waiting for dashboard navigation...');
-        await new Promise(r => setTimeout(r, 6000));
+        console.log('✅ [Delete Worker] OTP entered. Waiting for authentication and dashboard redirect...');
+        let loginSuccessful = false;
+
+        for (let wait = 0; wait < 20; wait++) {
+            await new Promise(r => setTimeout(r, 1000));
+            const currentUrl = page.url();
+
+            // Detect if Railway displayed an invalid code error
+            const hasError = await page.evaluate(() => {
+                const text = (document.body.innerText || '').toLowerCase();
+                return text.includes('incorrect code') || text.includes('invalid code') || text.includes('code expired') || text.includes('try again');
+            }).catch(() => false);
+
+            if (hasError) {
+                throw new Error(`Railway rejected OTP "${otp}" as incorrect/expired. Please generate a fresh code.`);
+            }
+
+            if (currentUrl.includes('dashboard') || currentUrl.includes('project') || currentUrl.includes('/account')) {
+                loginSuccessful = true;
+                break;
+            }
+
+            // Check if Terms of service modal is displayed (which also proves successful login)
+            const hasTerms = await page.evaluate(() => {
+                const text = (document.body.innerText || '').toLowerCase();
+                return text.includes('review and accept our terms') || text.includes('terms of service');
+            }).catch(() => false);
+
+            if (hasTerms) {
+                loginSuccessful = true;
+                break;
+            }
+        }
+
+        if (!loginSuccessful) {
+            // Check if we are still stuck on deploy/login page
+            const currentUrl = page.url();
+            if (!currentUrl.includes('dashboard') && !currentUrl.includes('project') && !currentUrl.includes('/account')) {
+                throw new Error(`Login was not completed with OTP ${otp}. Current URL is ${currentUrl}`);
+            }
+        }
 
         // Accept TOS if present
         await handleRailwayTermsOfService(page).catch(() => {});
