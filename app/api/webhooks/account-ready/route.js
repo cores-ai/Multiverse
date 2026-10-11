@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { saveD1RailwayAccount, saveD1RepoDeployment, getD1RepoEnvs, queryD1 } from '@/lib/d1';
+import { saveD1RailwayAccount, saveD1RepoDeployment, getD1RepoEnvs, queryD1, getRemoteConfig } from '@/lib/d1';
 import { createAccount, createLog, getRepositories, getRepoEnvVariables, updateRepositoryDeployment, updateAccountProjectsCount } from '@/lib/models';
 import { createRailwayProject, createRailwayService, setRailwayVariables, triggerRailwayDeploy } from '@/lib/railway';
 
@@ -9,7 +9,8 @@ export async function POST(request) {
         const { email, apiToken, secretKey } = body;
 
         // Security check
-        const expectedSecret = process.env.WEBHOOK_SECRET || 'mega-server-jit-worker-secret-2026';
+        const d1Secret = await getRemoteConfig('WEBHOOK_SECRET');
+        const expectedSecret = d1Secret || process.env.WEBHOOK_SECRET || 'mega-server-jit-worker-secret-2026';
         if (secretKey !== expectedSecret) {
             return NextResponse.json({ success: false, error: 'Unauthorized webhook request' }, { status: 401 });
         }
