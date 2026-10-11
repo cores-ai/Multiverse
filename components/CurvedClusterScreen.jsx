@@ -1,14 +1,20 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Copy, Check, RefreshCw, Key, ShieldCheck, Grid, Plus, Minus } from 'lucide-react';
+import { Copy, Check, RefreshCw, Key, ShieldCheck, Grid, Plus, Minus, UploadCloud } from 'lucide-react';
 
 export default function CurvedClusterScreen({
   accounts = [],
+  repos = [],
+  databaseAccounts = [],
+  githubCount = 0,
+  databaseCount = 0,
+  deadCount = 0,
   latestCluster,
   pingStatus = { latency: 38 },
   onQuickAddWorker,
   onRefresh,
+  onUpload,
   showGrid = true,
   onToggleGrid,
   onZoomIn,
@@ -188,6 +194,107 @@ export default function CurvedClusterScreen({
                 {copiedOtp ? <Check size={11} /> : <Copy size={11} />}
               </button>
             )}
+          </div>
+        </div>
+
+        {/* MIDDLE TELEMETRY BAR: Breaker | Upload | Breaker | GitHub | Breaker | Database | Breaker | Active/Dead */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'center' }}>
+          {/* Breaker 1 */}
+          <div style={{ width: '1px', height: '18px', background: 'rgba(56, 189, 248, 0.35)', flexShrink: 0 }} />
+
+          {/* Upload Button */}
+          <button
+            type="button"
+            onClick={onUpload}
+            title="Upload or Deploy New Repository"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              background: 'linear-gradient(135deg, rgba(0, 240, 255, 0.14) 0%, rgba(14, 165, 233, 0.08) 100%)',
+              border: '1px solid rgba(0, 240, 255, 0.45)',
+              borderRadius: '5px',
+              color: '#00F0FF',
+              padding: '3px 9px',
+              fontFamily: 'var(--font-mono, monospace)',
+              fontSize: '10px',
+              fontWeight: 800,
+              letterSpacing: '0.04em',
+              cursor: 'pointer',
+              boxShadow: '0 0 10px rgba(0, 240, 255, 0.15)',
+              transition: 'all 0.15s ease',
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(0, 240, 255, 0.25)';
+              e.currentTarget.style.boxShadow = '0 0 14px rgba(0, 240, 255, 0.35)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 240, 255, 0.14) 0%, rgba(14, 165, 233, 0.08) 100%)';
+              e.currentTarget.style.boxShadow = '0 0 10px rgba(0, 240, 255, 0.15)';
+            }}
+          >
+            <UploadCloud size={12} strokeWidth={2.4} />
+            <span>UPLOAD</span>
+          </button>
+
+          {/* Breaker 2 */}
+          <div style={{ width: '1px', height: '18px', background: 'rgba(56, 189, 248, 0.35)', flexShrink: 0 }} />
+
+          {/* GitHub Count */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontFamily: 'var(--font-mono, monospace)', flexShrink: 0 }}>
+            <span style={{ color: '#94A3B8', fontWeight: 600 }}>github :</span>
+            <span style={{ color: '#00F0FF', fontWeight: 800, background: 'rgba(0, 240, 255, 0.1)', padding: '1px 5px', borderRadius: '3px', border: '1px solid rgba(0, 240, 255, 0.25)' }}>
+              {parseInt(githubCount || repos.length || 0) < 10 ? `0${parseInt(githubCount || repos.length || 0)}` : `${parseInt(githubCount || repos.length || 0)}`}
+            </span>
+          </div>
+
+          {/* Breaker 3 */}
+          <div style={{ width: '1px', height: '18px', background: 'rgba(56, 189, 248, 0.35)', flexShrink: 0 }} />
+
+          {/* Database Count */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontFamily: 'var(--font-mono, monospace)', flexShrink: 0 }}>
+            <span style={{ color: '#94A3B8', fontWeight: 600 }}>database :</span>
+            <span style={{ color: '#C084FC', fontWeight: 800, background: 'rgba(192, 132, 252, 0.1)', padding: '1px 5px', borderRadius: '3px', border: '1px solid rgba(192, 132, 252, 0.25)' }}>
+              {parseInt(databaseCount || databaseAccounts.length || repos.length || 0) < 10 ? `0${parseInt(databaseCount || databaseAccounts.length || repos.length || 0)}` : `${parseInt(databaseCount || databaseAccounts.length || repos.length || 0)}`}
+            </span>
+          </div>
+
+          {/* Breaker 4 */}
+          <div style={{ width: '1px', height: '18px', background: 'rgba(56, 189, 248, 0.35)', flexShrink: 0 }} />
+
+          {/* Active 100% or Dead : XX Alert */}
+          <div 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              fontSize: '10.5px',
+              fontFamily: 'var(--font-mono, monospace)',
+              fontWeight: 700,
+              padding: '2px 7px',
+              borderRadius: '4px',
+              background: deadCount > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.12)',
+              border: deadCount > 0 ? '1px solid rgba(239, 68, 68, 0.5)' : '1px solid rgba(16, 185, 129, 0.4)',
+              color: deadCount > 0 ? '#EF4444' : '#10B981',
+              boxShadow: deadCount > 0 ? '0 0 10px rgba(239, 68, 68, 0.3)' : '0 0 8px rgba(16, 185, 129, 0.2)',
+              flexShrink: 0
+            }}
+          >
+            <span 
+              style={{ 
+                width: '6px', 
+                height: '6px', 
+                borderRadius: '50%', 
+                background: deadCount > 0 ? '#EF4444' : '#10B981', 
+                boxShadow: deadCount > 0 ? '0 0 8px #EF4444' : '0 0 8px #10B981' 
+              }} 
+            />
+            <span>
+              {deadCount > 0 
+                ? `Dead : ${parseInt(deadCount) < 10 ? `0${parseInt(deadCount)}` : `${parseInt(deadCount)}`}` 
+                : 'Active : 100%'}
+            </span>
           </div>
         </div>
 

@@ -54,6 +54,8 @@ export default function OwnerManagementDashboard() {
   // Fleet data states (Synchronized with backend for zero hydration flash)
   const [accounts, setAccounts] = useState([]);
   const [repos, setRepos] = useState([]);
+  const [githubRepoCount, setGithubRepoCount] = useState(0);
+  const [deadRepoCount, setDeadRepoCount] = useState(0);
   const [logs, setLogs] = useState([
     {
       type: 'SYSTEM_BOOT',
@@ -217,7 +219,11 @@ export default function OwnerManagementDashboard() {
       ]);
 
       if (accRes.success && Array.isArray(accRes.accounts)) setAccounts(accRes.accounts);
-      if (repoRes.success && Array.isArray(repoRes.repos)) setRepos(repoRes.repos);
+      if (repoRes.success) {
+        if (Array.isArray(repoRes.repos)) setRepos(repoRes.repos);
+        if (repoRes.githubCount !== undefined) setGithubRepoCount(repoRes.githubCount);
+        if (repoRes.deadCount !== undefined) setDeadRepoCount(repoRes.deadCount);
+      }
       if (logRes.success && Array.isArray(logRes.logs)) setLogs(logRes.logs);
       if (storageRes.success && Array.isArray(storageRes.storageAccounts)) setStorageAccounts(storageRes.storageAccounts);
       if (dbRes.success && Array.isArray(dbRes.databaseAccounts)) setDatabaseAccounts(dbRes.databaseAccounts);
@@ -1062,10 +1068,16 @@ export default function OwnerManagementDashboard() {
             {/* Authentic 1500R Curved Monitor CRT/OLED Cluster Telemetry Screen (Zero Dummy Data) */}
             <CurvedClusterScreen
               accounts={accounts}
+              repos={repos}
+              databaseAccounts={databaseAccounts}
+              githubCount={githubRepoCount || repos.length}
+              databaseCount={databaseAccounts.length || repos.length}
+              deadCount={deadRepoCount}
               latestCluster={latestCluster}
               pingStatus={pingStatus}
               onQuickAddWorker={handleQuickAutoAddWorker}
               onRefresh={fetchData}
+              onUpload={() => setShowDeployModal(true)}
               showGrid={showGrid}
               onToggleGrid={handleToggleGrid}
               onZoomIn={handleZoomIn}

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getRepositories, saveRepository } from '@/lib/models';
-import { getD1RepoDeployments, saveD1RepoDeployment, saveD1RepoEnvs, getD1RepoEnvs } from '@/lib/d1';
+import { getD1RepoDeployments, saveD1RepoDeployment, saveD1RepoEnvs, getD1RepoEnvs, getRemoteConfig } from '@/lib/d1';
+import { Octokit } from '@octokit/rest';
 
 export async function GET() {
     try {
@@ -11,13 +12,38 @@ export async function GET() {
             assignedAccountId: r.account_id,
             serviceType: 'HEAVY',
             branch: 'main',
-            deploymentStatus: r.deployment_status,
+            deploymentStatus: r.deployment_status || 'ACTIVE',
             liveUrl: r.live_url
         }));
-        return NextResponse.json({ success: true, repos: mapped });
+
+        let githubCount = mapped.length;
+        try {
+            let token = await getRemoteConfig('GITHUB_TOKEN');
+            if (!token || token.trim() === '') token = process.env.GITHUB_TOKEN;
+            if (token && !token.includes('your_github_personal_access_token')) {
+                const octokit = new Octokit({ auth: token });
+                const { data: ghRepos } = await octokit.repos.listForAuthenticatedUser({ per_page: 100 });
+                if (Array.isArray(ghRepos)) {
+                    githubCount = ghRepos.length;
+                }
+            }
+        } catch (e) {
+            // fallback to mapped count if GitHub API is unreachable
+        }
+
+        const deadCount = mapped.filter(r => 
+            ['FAILED', 'DEAD', 'CRASHED', 'ERROR'].includes((r.deploymentStatus || '').toUpperCase())
+        ).length;
+
+        return NextResponse.json({ 
+            success: true, 
+            repos: mapped,
+            githubCount,
+            deadCount
+        });
     } catch (e) {
         console.error('Error fetching D1 repos:', e.message);
-        return NextResponse.json({ success: true, repos: [] });
+        return NextResponse.json({ success: true, repos: [], githubCount: 0, deadCount: 0 });
     }
 }
 
