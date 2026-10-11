@@ -301,7 +301,6 @@ export default function OwnerManagementDashboard() {
         console.warn('Zip buffer read notice:', bufErr.message);
       }
       try {
-      try {
         if (!window.JSZip) {
           await new Promise((resolve, reject) => {
             const script = document.createElement('script');
@@ -2649,4 +2648,5 @@ export default function OwnerManagementDashboard() {
     </div>
   );
 }
+
 

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { 
@@ -312,14 +312,14 @@ export default function WorkerCanvas({
       // Step 4: Railway requests OTP -> Train returns to Middle (Cluster Mailbox) to intercept OTP
       setTrainTransition('transform 2.0s cubic-bezier(0.25, 1, 0.5, 1)');
       setTrainPosition('middle');
-      setClusterStepText('4/5 Railway Requested OTP • Intercepting Mail...');
+      setClusterStepText('4/5 Railway Requested OTP â€¢ Intercepting Mail...');
       await sleep(2400);
       setGenProgress(85);
 
       // Step 5: OTP acquired -> Train rushes to Right (Server) to submit OTP
       setTrainTransition('transform 2.0s cubic-bezier(0.25, 1, 0.5, 1)');
       setTrainPosition('right');
-      setClusterStepText('5/5 Submitting OTP • Provisioning Instance...');
+      setClusterStepText('5/5 Submitting OTP â€¢ Provisioning Instance...');
       await sleep(2200);
       setGenProgress(95);
 
@@ -346,7 +346,7 @@ export default function WorkerCanvas({
       setGenProgress(0);
       setClusterStepText('');
     }
-  };  };
+  };
 
   const handleDeleteCluster = async (targetId, targetEmail = null) => {
     if (!targetId) return;
@@ -374,9 +374,9 @@ export default function WorkerCanvas({
     }
   };
 
-  // ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // GLOWING SINGLE-THREAD LASER WIRES (NORMAL PIPE VLA)
-  // ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const wireConnections = [];
   const activeSockets = {};
 
@@ -1066,10 +1066,11 @@ export default function WorkerCanvas({
       {/* Cluster Created Toast */}
       {showClusterPopup && (
         <div className="cluster-created-popup">
-          <span className="cluster-popup-icon">✓</span>
+          <span className="cluster-popup-icon">âœ“</span>
           <span className="cluster-popup-text">Cluster Created Successfully</span>
         </div>
       )}
     </div>
   );
 }
+
