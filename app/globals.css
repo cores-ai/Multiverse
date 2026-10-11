@@ -58,7 +58,7 @@ button { font-family: inherit; }
   color: var(--text-primary);
 }
 
-/* Fixed Left Sidebar */
+/* Sliding Left Sidebar */
 .app-sidebar {
   width: 260px;
   min-width: 260px;
@@ -73,30 +73,39 @@ button { font-family: inherit; }
   padding: 22px 16px 42px;
   z-index: 50;
   box-shadow: 10px 0 30px rgba(0, 0, 0, 0.4);
+  transition: margin-left 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+
+.app-sidebar.is-collapsed {
+  margin-left: -260px;
+  transform: translateX(-100%);
+  pointer-events: none;
+  opacity: 0;
 }
 
 .sidebar-header {
   margin-bottom: 26px;
-  padding: 0 8px;
+  padding: 0 4px;
 }
 
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .brand-glyph {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 6px;
   background: linear-gradient(135deg, rgba(0, 240, 255, 0.25) 0%, rgba(14, 165, 233, 0.15) 100%);
   border: 1px solid rgba(0, 240, 255, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--accent-cyan);
-  box-shadow: 0 0 16px rgba(0, 240, 255, 0.25);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
 }
 
 .brand-text-block {

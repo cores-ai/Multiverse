@@ -5,7 +5,7 @@ import {
   LayoutDashboard, HardDrive, Layers, Key, Shield, Terminal, 
   Plus, RefreshCw, ExternalLink, Play, Radio, Cpu, Zap, 
   CheckCircle2, AlertTriangle, ArrowUpRight, Lock, Activity,
-  Globe, Search, ChevronRight, ChevronDown, Server, Trash2, Cloud, Database, Sliders
+  Globe, Search, ChevronRight, ChevronDown, Server, Trash2, Cloud, Database, Sliders, X, Menu
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import SpiderNetwork from '@/components/SpiderNetwork';
@@ -15,6 +15,7 @@ const WorkerCanvas = dynamic(() => import('@/components/WorkerCanvas'), { ssr: f
 export default function OwnerManagementDashboard() {
   // Navigation & Accordion Sections
   const [activeModule, setActiveModule] = useState('overview');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [openSections, setOpenSections] = useState({
     server: true,
     storage: false,
@@ -673,24 +674,93 @@ export default function OwnerManagementDashboard() {
 
   return (
     <div className="app-shell">
+      {/* Mini Hamburger Trigger (Only visible when sidebar is closed) */}
+      {!isSidebarOpen && (
+        <button
+          onClick={() => setIsSidebarOpen(true)}
+          className="mini-hamburger-btn"
+          title="Open Navigation"
+          style={{
+            position: 'fixed',
+            top: '12px',
+            left: '12px',
+            zIndex: 1000,
+            width: '32px',
+            height: '32px',
+            borderRadius: '8px',
+            background: 'rgba(10, 16, 26, 0.85)',
+            border: '1px solid rgba(0, 240, 255, 0.35)',
+            color: '#00F0FF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 0 14px rgba(0, 240, 255, 0.2)',
+            backdropFilter: 'blur(8px)',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Menu size={16} />
+        </button>
+      )}
+
       {/* ========================================================
-          1. PERMANENT LEFT SIDEBAR (Categorized Sections)
+          1. SLIDING LEFT SIDEBAR (Hideable on X click)
           ======================================================== */}
-      <aside className="app-sidebar">
+      <aside 
+        className={`app-sidebar ${!isSidebarOpen ? 'is-collapsed' : ''}`}
+      >
         <div className="sidebar-scrollable-content">
           {/* Brand Header */}
-          <div className="sidebar-header">
-            <div className="sidebar-brand">
-              <div className="brand-glyph">
-                <Server size={20} />
+          <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
+            <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div 
+                className="brand-glyph"
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  minWidth: '24px',
+                  borderRadius: '6px',
+                  boxShadow: '0 0 8px rgba(0, 240, 255, 0.2)'
+                }}
+              >
+                <Server size={12} />
               </div>
               <div className="brand-text-block">
-                <span className="brand-title" style={{ fontSize: '14px', letterSpacing: '-0.01em', textTransform: 'lowercase' }}>
+                <span className="brand-title" style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '-0.01em', textTransform: 'lowercase', whiteSpace: 'nowrap' }}>
                   iq4u8- server management
                 </span>
-                <span className="brand-subtitle">Autonomous Fleet Controller</span>
               </div>
             </div>
+
+            {/* Close Sidebar X Icon */}
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="sidebar-close-btn"
+              title="Hide Navigation"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255, 255, 255, 0.55)',
+                cursor: 'pointer',
+                padding: '4px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#00F0FF';
+                e.currentTarget.style.background = 'rgba(0, 240, 255, 0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'rgba(255, 255, 255, 0.55)';
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <X size={15} />
+            </button>
           </div>
 
           {/* Section Navigation */}
