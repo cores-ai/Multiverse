@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { 
@@ -89,8 +89,9 @@ export default function OwnerManagementDashboard() {
   // Database fleet state (Neon PostgreSQL, Upstash Redis, MongoDB Atlas)
   const [databaseAccounts, setDatabaseAccounts] = useState([]);
 
-  // Extracted repository files map from dropped archive / zip
+  // Extracted repository files map and raw base64 buffer from dropped archive / zip
   const [extractedRepoFiles, setExtractedRepoFiles] = useState({});
+  const [repoZipBase64, setRepoZipBase64] = useState(null);
   const [pipelineTrigger, setPipelineTrigger] = useState(0);
 
   // Modals
@@ -230,31 +231,31 @@ export default function OwnerManagementDashboard() {
   const loadRatio = totalSlots > 0 ? (usedSlots / totalSlots) : 1;
 
   let healthTier = 'green';
-  let healthEmoji = '🟢';
+  let healthEmoji = 'ðŸŸ¢';
   let healthPercentage = 95;
   let healthStatusText = 'Server pura healthy & balanced hai';
 
   if (accounts.length === 0) {
     healthTier = 'red';
-    healthEmoji = '🔴';
+    healthEmoji = 'ðŸ”´';
     healthPercentage = 0;
     healthStatusText = 'No accounts connected (Critical)';
   } else if (loadRatio >= 0.85) {
     // Red: overload hai!
     healthTier = 'red';
-    healthEmoji = '🔴';
+    healthEmoji = 'ðŸ”´';
     healthPercentage = Math.max(20, Math.round(100 - (loadRatio * 70)));
     healthStatusText = 'Fleet overload! New account needed to transfer load';
   } else if (loadRatio >= 0.50) {
     // Yellow: load jyda h aa rha h but balanced hai
     healthTier = 'yellow';
-    healthEmoji = '🟡';
+    healthEmoji = 'ðŸŸ¡';
     healthPercentage = Math.min(Math.max(Math.round(100 - (loadRatio * 45)), 55), 84);
     healthStatusText = 'Load jyada hai, but balanced hai';
   } else {
     // Green: server pura healthy h, balanced hai
     healthTier = 'green';
-    healthEmoji = '🟢';
+    healthEmoji = 'ðŸŸ¢';
     healthPercentage = Math.min(Math.max(Math.round(98 - (loadRatio * 16)), 88), 99);
     healthStatusText = 'Server pura healthy hai, balanced hai';
   }
@@ -286,6 +287,20 @@ export default function OwnerManagementDashboard() {
     // 2. Deep Zip extraction if an archive is dropped
     let extractedMap = {};
     if (lowerName.endsWith('.zip')) {
+      try {
+        const arrayBuf = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuf);
+        let binaryStr = '';
+        const chunkSz = 8192;
+        for (let i = 0; i < bytes.length; i += chunkSz) {
+          binaryStr += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSz));
+        }
+        const b64 = btoa(binaryStr);
+        setRepoZipBase64(b64);
+      } catch (bufErr) {
+        console.warn('Zip buffer read notice:', bufErr.message);
+      }
+      try {
       try {
         if (!window.JSZip) {
           await new Promise((resolve, reject) => {
@@ -466,6 +481,7 @@ export default function OwnerManagementDashboard() {
         setNewRepoName('');
         setRepoFile(null);
         setExtractedRepoFiles({});
+        setRepoZipBase64(null);
         setEnvFile(null);
         setNewRepoEnvs('');
         fetchData();
@@ -1155,7 +1171,7 @@ export default function OwnerManagementDashboard() {
         {/* Dynamic Page Body or Canvas */}
         {activeModule === 'overview' ? (
           /* ========================================================
-             MODULE 1: SERVER OVERVIEW — DRAGGABLE WORKER CANVAS
+             MODULE 1: SERVER OVERVIEW â€” DRAGGABLE WORKER CANVAS
              ======================================================== */
           <>
             {/* Authentic 1500R Curved Monitor CRT/OLED Cluster Telemetry Screen (Zero Dummy Data) */}
@@ -1212,7 +1228,7 @@ export default function OwnerManagementDashboard() {
           </>
         ) : activeModule === 'storage_overview' ? (
           /* ========================================================
-             MODULE 2: STORAGE OVERVIEW — CLOUD STORAGE CANVAS
+             MODULE 2: STORAGE OVERVIEW â€” CLOUD STORAGE CANVAS
              ======================================================== */
           <WorkerCanvas
             mode="storage"
@@ -1228,7 +1244,7 @@ export default function OwnerManagementDashboard() {
           />
         ) : activeModule === 'database_overview' ? (
           /* ========================================================
-             MODULE 3: DATABASE OVERVIEW — DATABASE CLUSTER CANVAS
+             MODULE 3: DATABASE OVERVIEW â€” DATABASE CLUSTER CANVAS
              ======================================================== */
           <WorkerCanvas
             mode="database"
@@ -1527,7 +1543,7 @@ export default function OwnerManagementDashboard() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                         <span>Capacity: {acc.activeProjectsCount || 0} / {acc.maxCapacity || 2} Projects</span>
                         <span style={{ color: acc.remainingCredits <= 2.0 ? 'var(--accent-rose)' : 'var(--accent-emerald)' }}>
-                          {acc.remainingCredits <= 2.0 ? '⚠ LOW CREDIT (HOP READY)' : '✓ HEALTHY'}
+                          {acc.remainingCredits <= 2.0 ? 'âš  LOW CREDIT (HOP READY)' : 'âœ“ HEALTHY'}
                         </span>
                       </div>
 
@@ -1616,19 +1632,19 @@ export default function OwnerManagementDashboard() {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginTop: '16px' }}>
                 <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-card-inner)', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>🛡️ WebRTC Leak Shield</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>ðŸ›¡ï¸ WebRTC Leak Shield</div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>Drops STUN/TURN queries. Host VPS IP is never revealed to target APIs.</div>
                   <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--accent-emerald)', fontFamily: 'var(--font-mono)' }}>STATUS: ENFORCED</div>
                 </div>
 
                 <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-card-inner)', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>🔒 Google Cloud DoH</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>ðŸ”’ Google Cloud DoH</div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>Encrypted 8.8.8.8 DoH tunnel bypassing cloud rate limits without proxy fees.</div>
                   <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--accent-emerald)', fontFamily: 'var(--font-mono)' }}>STATUS: ENFORCED</div>
                 </div>
 
                 <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-card-inner)', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>⚡ Auto-Hop Failover</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>âš¡ Auto-Hop Failover</div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>Triggers automatic container cloning when Railway balance &le; $2.00.</div>
                   <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>STATUS: MONITORING</div>
                 </div>
@@ -1702,7 +1718,7 @@ export default function OwnerManagementDashboard() {
 
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button className="btn-action-dark" onClick={handleQuickAddStorage}>
-                    ⚡ Auto-Add Bucket
+                    âš¡ Auto-Add Bucket
                   </button>
                   <button className="btn-action-cyan" onClick={() => setShowStorageModal(true)}>
                     + Connect R2 Bucket
@@ -1749,7 +1765,7 @@ export default function OwnerManagementDashboard() {
                       {/* Storage Progress Bar */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                         <span>Used: {storageUsed.toFixed(2)} GB ({pctUsed}%)</span>
-                        <span style={{ color: '#10B981', fontFamily: 'var(--font-mono)', fontSize: '10px' }}>✓ ZERO EGRESS</span>
+                        <span style={{ color: '#10B981', fontFamily: 'var(--font-mono)', fontSize: '10px' }}>âœ“ ZERO EGRESS</span>
                       </div>
 
                       <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden', marginBottom: '14px' }}>
@@ -1771,7 +1787,7 @@ export default function OwnerManagementDashboard() {
                               style={{ background: 'transparent', border: 'none', color: copiedId === `cf_${acc.storageId || idx}` ? '#10b981' : '#64748b', cursor: 'pointer', fontSize: '11px' }}
                               title="Copy Account ID"
                             >
-                              {copiedId === `cf_${acc.storageId || idx}` ? '✓' : '📋'}
+                              {copiedId === `cf_${acc.storageId || idx}` ? 'âœ“' : 'ðŸ“‹'}
                             </button>
                           </div>
                         </div>
@@ -1779,13 +1795,13 @@ export default function OwnerManagementDashboard() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
                           <span style={{ color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>Access Key ID</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ color: '#fff', fontFamily: 'var(--font-mono)' }}>{acc.accessKeyIdMasked || 'cf_r••••••••9801'}</span>
+                            <span style={{ color: '#fff', fontFamily: 'var(--font-mono)' }}>{acc.accessKeyIdMasked || 'cf_râ€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢9801'}</span>
                             <button 
                               onClick={() => handleCopyText(acc.accessKeyId || acc.accessKeyIdMasked || '', `key_${acc.storageId || idx}`)}
                               style={{ background: 'transparent', border: 'none', color: copiedId === `key_${acc.storageId || idx}` ? '#10b981' : '#64748b', cursor: 'pointer', fontSize: '11px' }}
                               title="Copy Access Key ID"
                             >
-                              {copiedId === `key_${acc.storageId || idx}` ? '✓' : '📋'}
+                              {copiedId === `key_${acc.storageId || idx}` ? 'âœ“' : 'ðŸ“‹'}
                             </button>
                           </div>
                         </div>
@@ -1794,14 +1810,14 @@ export default function OwnerManagementDashboard() {
                           <span style={{ color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>Secret (AES-256)</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ color: revealedSecrets[acc.storageId] ? '#00F0FF' : '#94a3b8', fontFamily: 'var(--font-mono)' }}>
-                              {revealedSecrets[acc.storageId] || acc.secretAccessKeyMasked || 'cf_r••••••••74a01'}
+                              {revealedSecrets[acc.storageId] || acc.secretAccessKeyMasked || 'cf_râ€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢74a01'}
                             </span>
                             <button 
                               onClick={() => handleRevealSecret(acc.storageId)}
                               style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '10px' }}
                               title="Reveal AES-256 Decrypted Secret"
                             >
-                              {revealedSecrets[acc.storageId] ? '🔒 Hide' : '👁️ Reveal'}
+                              {revealedSecrets[acc.storageId] ? 'ðŸ”’ Hide' : 'ðŸ‘ï¸ Reveal'}
                             </button>
                             {revealedSecrets[acc.storageId] && (
                               <button 
@@ -1809,7 +1825,7 @@ export default function OwnerManagementDashboard() {
                                 style={{ background: 'transparent', border: 'none', color: copiedId === `sec_${acc.storageId}` ? '#10b981' : '#64748b', cursor: 'pointer', fontSize: '11px' }}
                                 title="Copy Secret Key"
                               >
-                                {copiedId === `sec_${acc.storageId}` ? '✓' : '📋'}
+                                {copiedId === `sec_${acc.storageId}` ? 'âœ“' : 'ðŸ“‹'}
                               </button>
                             )}
                           </div>
@@ -1826,7 +1842,7 @@ export default function OwnerManagementDashboard() {
                               style={{ background: 'transparent', border: 'none', color: copiedId === `ep_${acc.storageId || idx}` ? '#10b981' : '#64748b', cursor: 'pointer', fontSize: '11px' }}
                               title="Copy S3 Endpoint"
                             >
-                              {copiedId === `ep_${acc.storageId || idx}` ? '✓' : '📋'}
+                              {copiedId === `ep_${acc.storageId || idx}` ? 'âœ“' : 'ðŸ“‹'}
                             </button>
                           </div>
                         </div>
@@ -2012,19 +2028,19 @@ export default function OwnerManagementDashboard() {
               {/* 3. Cloudflare R2 Free Tier Advantage Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginTop: '22px' }}>
                 <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-card-inner)', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>🚀 Zero Egress Fees</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>ðŸš€ Zero Egress Fees</div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>$0.00 bandwidth charges worldwide. Unlike AWS S3 ($0.09/GB), Cloudflare R2 egress is 100% free forever.</div>
                   <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--accent-emerald)', fontFamily: 'var(--font-mono)' }}>BANDWIDTH: $0.00 / FREE</div>
                 </div>
 
                 <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-card-inner)', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>⚡ Free Operations Quota</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>âš¡ Free Operations Quota</div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>1,000,000 Class A ops (writes/uploads) and 10,000,000 Class B ops (reads/lists) included free each month.</div>
                   <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>QUOTA: 1M / 10M INCLUDED</div>
                 </div>
 
                 <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-card-inner)', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>🔒 MongoDB Credential Vault</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>ðŸ”’ MongoDB Credential Vault</div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>All access keys and secrets stored securely in MongoDB via Vercel ENV with military-grade AES-256-GCM encryption.</div>
                   <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--accent-purple)', fontFamily: 'var(--font-mono)' }}>CIPHER: AES-256-GCM</div>
                 </div>
@@ -2084,7 +2100,7 @@ export default function OwnerManagementDashboard() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                       <span>Memory / Storage: {acc.storageUsedGb ? `${acc.storageUsedGb} GB` : '0.12 GB'}</span>
                       <span style={{ color: 'var(--accent-emerald)' }}>
-                        ✓ SSL POOLING ACTIVE
+                        âœ“ SSL POOLING ACTIVE
                       </span>
                     </div>
 
@@ -2094,14 +2110,14 @@ export default function OwnerManagementDashboard() {
                         <span style={{ color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>Connection String</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span style={{ color: '#C084FC', fontFamily: 'var(--font-mono)' }}>
-                            {acc.connectionStringMasked || 'post••••••••8912'}
+                            {acc.connectionStringMasked || 'postâ€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢8912'}
                           </span>
                           <button 
                             onClick={() => handleCopyText(acc.connectionString || acc.connectionStringMasked || '', `db_${acc.dbId || idx}`)}
                             style={{ background: 'transparent', border: 'none', color: copiedId === `db_${acc.dbId || idx}` ? '#10b981' : '#64748b', cursor: 'pointer', fontSize: '11px' }}
                             title="Copy Connection String"
                           >
-                            {copiedId === `db_${acc.dbId || idx}` ? '✓' : '📋'}
+                            {copiedId === `db_${acc.dbId || idx}` ? 'âœ“' : 'ðŸ“‹'}
                           </button>
                         </div>
                       </div>
@@ -2144,19 +2160,19 @@ export default function OwnerManagementDashboard() {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginTop: '16px' }}>
                 <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-card-inner)', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>🔌 Transaction Pooler</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>ðŸ”Œ Transaction Pooler</div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>Low-latency connection pooling handling up to 10,000 concurrent client queries without socket exhaustion.</div>
                   <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--accent-emerald)', fontFamily: 'var(--font-mono)' }}>POOL: TRANSACTION (64/200)</div>
                 </div>
 
                 <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-card-inner)', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>⚡ Auto Read Replicas</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>âš¡ Auto Read Replicas</div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>Sub-millisecond query offloading to regional edge replicas. Zero write impact on primary master.</div>
                   <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>LATENCY: 8ms AVG</div>
                 </div>
 
                 <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-card-inner)', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>💾 Automated Snapshots</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>ðŸ’¾ Automated Snapshots</div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>Point-in-time recovery (PITR) snapshots generated every 6 hours with automated integrity verification.</div>
                   <div style={{ marginTop: '10px', fontSize: '10px', color: 'var(--accent-purple)', fontFamily: 'var(--font-mono)' }}>STATUS: BACKED UP (24m ago)</div>
                 </div>
@@ -2178,7 +2194,7 @@ export default function OwnerManagementDashboard() {
                 <Play size={16} fill="var(--accent-cyan)" color="var(--accent-cyan)" />
                 <span>Deploy New VPS Instance</span>
               </div>
-              <button className="modal-close-btn" onClick={() => setShowDeployModal(false)}>✕</button>
+              <button className="modal-close-btn" onClick={() => setShowDeployModal(false)}>âœ•</button>
             </div>
 
             <form onSubmit={handleDeploySubmit}>
@@ -2249,7 +2265,7 @@ export default function OwnerManagementDashboard() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div className="deploy-drag-badge">
                             <Check size={12} />
-                            <span>{repoFile.name} ({repoFile.size}{repoFile.filesCount ? ` • ${repoFile.filesCount} files` : ''})</span>
+                            <span>{repoFile.name} ({repoFile.size}{repoFile.filesCount ? ` â€¢ ${repoFile.filesCount} files` : ''})</span>
                           </div>
                           <button
                             type="button"
@@ -2257,7 +2273,7 @@ export default function OwnerManagementDashboard() {
                             style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: '12px' }}
                             title="Remove / Replace File"
                           >
-                            ✕
+                            âœ•
                           </button>
                         </div>
                       ) : (
@@ -2326,7 +2342,7 @@ export default function OwnerManagementDashboard() {
                             style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: '12px' }}
                             title="Remove / Replace File"
                           >
-                            ✕
+                            âœ•
                           </button>
                         </div>
                       ) : (
@@ -2344,7 +2360,7 @@ export default function OwnerManagementDashboard() {
                   Cancel
                 </button>
                 <button type="submit" className="btn-action-cyan" disabled={isSubmitting || isScanningRepo || isScanningEnv}>
-                  {isSubmitting ? 'Allocating Node & Deploying...' : 'Deploy to Active Node ⚡'}
+                  {isSubmitting ? 'Allocating Node & Deploying...' : 'Deploy to Active Node âš¡'}
                 </button>
               </div>
             </form>
@@ -2363,7 +2379,7 @@ export default function OwnerManagementDashboard() {
                 <Plus size={16} />
                 <span>Register Railway Account</span>
               </div>
-              <button className="modal-close-btn" onClick={() => setShowAccountModal(false)}>✕</button>
+              <button className="modal-close-btn" onClick={() => setShowAccountModal(false)}>âœ•</button>
             </div>
 
             <form onSubmit={handleAddAccount}>
@@ -2431,7 +2447,7 @@ export default function OwnerManagementDashboard() {
                   Version: v{envVersion} (AES-256-GCM Encrypted)
                 </div>
               </div>
-              <button className="modal-close-btn" onClick={() => setShowEnvModal(false)}>✕</button>
+              <button className="modal-close-btn" onClick={() => setShowEnvModal(false)}>âœ•</button>
             </div>
 
             <div className="form-group-block">
@@ -2478,7 +2494,7 @@ export default function OwnerManagementDashboard() {
                 <Cloud size={16} color="#38BDF8" />
                 <span>Connect Cloudflare R2 Vault (10 GB Free)</span>
               </div>
-              <button className="modal-close-btn" onClick={() => setShowStorageModal(false)}>✕</button>
+              <button className="modal-close-btn" onClick={() => setShowStorageModal(false)}>âœ•</button>
             </div>
 
             <form onSubmit={handleConnectStorageSubmit}>
@@ -2556,7 +2572,7 @@ export default function OwnerManagementDashboard() {
                   Cancel
                 </button>
                 <button type="submit" className="btn-action-cyan" disabled={isSubmittingStorage}>
-                  {isSubmittingStorage ? 'Encrypting & Storing in MongoDB...' : 'Connect R2 Bucket ⚡'}
+                  {isSubmittingStorage ? 'Encrypting & Storing in MongoDB...' : 'Connect R2 Bucket âš¡'}
                 </button>
               </div>
             </form>
@@ -2575,7 +2591,7 @@ export default function OwnerManagementDashboard() {
                 <Terminal size={17} color="#EF4444" />
                 <span>Railway Deployment Logs: {selectedLogCard?.label || selectedLogCard?.email || selectedLogCard?.repoName || 'Instance'}</span>
               </div>
-              <button className="modal-close-btn" onClick={() => setShowLogModal(false)}>✕</button>
+              <button className="modal-close-btn" onClick={() => setShowLogModal(false)}>âœ•</button>
             </div>
 
             <div style={{
@@ -2633,3 +2649,4 @@ export default function OwnerManagementDashboard() {
     </div>
   );
 }
+

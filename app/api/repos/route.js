@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { getRepositories, saveRepository } from '@/lib/models';
 import { getD1RepoDeployments, saveD1RepoDeployment, saveD1RepoEnvs, getD1RepoEnvs, getRemoteConfig, getD1RailwayAccounts, queryD1 } from '@/lib/d1';
+import { unpackZipBuffer } from '@/lib/unzip';
 import { Octokit } from '@octokit/rest';
 
 export async function GET() {
@@ -37,13 +38,13 @@ export async function GET() {
 export async function POST(request) {
     try {
         const body = await request.json();
-        const { repoName, serviceType = 'HEAVY', assignedAccountId: providedAccountId, githubUrl, envs, envVariables, files } = body;
+        const { repoName, serviceType = 'HEAVY', assignedAccountId: providedAccountId, githubUrl, envs, envVariables, files: providedFiles, zipBase64 } = body;
 
         if (!repoName) {
             return NextResponse.json({ success: false, error: 'repoName is required' }, { status: 400 });
         }
 
-        // Clean repo name: strip any stray main/master suffixes and clean characters
+        // Clean repo name: strip any stray main/master/dev suffixes and clean characters
         let cleanRepoName = String(repoName || '')
             .trim()
             .toLowerCase()
@@ -51,6 +52,19 @@ export async function POST(request) {
             .replace(/-(main|master|dev|latest)$/i, '')
             .replace(/[^a-z0-9-]/g, '-')
             .replace(/-+/g, '-');
+
+        // Resolve files: either from direct extracted map or zipBase64 buffer
+        let files = providedFiles && typeof providedFiles === 'object' ? { ...providedFiles } : {};
+        if (zipBase64 && typeof zipBase64 === 'string') {
+            try {
+                const zipBuffer = Buffer.from(zipBase64, 'base64');
+                const unzippedFiles = unpackZipBuffer(zipBuffer);
+                files = { ...unzippedFiles, ...files };
+                console.log(`[Unpack API] Extracted ${Object.keys(unzippedFiles).length} files from uploaded ZIP buffer.`);
+            } catch (zErr) {
+                console.error('[Unpack API Error]:', zErr.message);
+            }
+        }
 
         // Pre-flight Security Audit: Scan files for leaked API keys
         const secretRegex = /((ghp_|gho_|github_pat_|railway_token|rly_tok_|sk-[a-zA-Z0-9]{20,}|eyJhbGciOi|bot_token=|telegram_bot=|[a-z0-9_]*(?:secret|apikey|private_key)\s*[:=]\s*["'][a-z0-9_\-]{8,}["']))/i;
@@ -102,15 +116,23 @@ export async function POST(request) {
                         const fileEntries = Object.entries(files);
                         console.log(`[GitHub API] Ingesting ${fileEntries.length} files into ${owner}/${cleanRepoName}...`);
 
+                        // Small wait to ensure repo ref is ready if newly created
+                        await new Promise(r => setTimeout(r, 600));
+
                         const { data: repoData } = await octokit.repos.get({ owner, repo: cleanRepoName });
                         const defaultBranch = repoData.default_branch || 'main';
 
-                        const { data: refData } = await octokit.git.getRef({
-                            owner,
-                            repo: cleanRepoName,
-                            ref: `heads/${defaultBranch}`
-                        });
-                        const parentCommitSha = refData.object.sha;
+                        let parentCommitSha = null;
+                        try {
+                            const { data: refData } = await octokit.git.getRef({
+                                owner,
+                                repo: cleanRepoName,
+                                ref: `heads/${defaultBranch}`
+                            });
+                            parentCommitSha = refData.object.sha;
+                        } catch (refErr) {
+                            console.warn('[GitHub API] Heads ref notice:', refErr.message);
+                        }
 
                         // Create Git Blobs
                         const treeEntries = [];
@@ -146,22 +168,36 @@ export async function POST(request) {
                             });
 
                             // Create Commit
-                            const { data: newCommit } = await octokit.git.createCommit({
+                            const commitPayload = {
                                 owner,
                                 repo: cleanRepoName,
                                 message: `feat(deploy): ingest complete repository codebase (${treeEntries.length} files)`,
-                                tree: tree.sha,
-                                parents: [parentCommitSha]
-                            });
+                                tree: tree.sha
+                            };
+                            if (parentCommitSha) {
+                                commitPayload.parents = [parentCommitSha];
+                            }
+
+                            const { data: newCommit } = await octokit.git.createCommit(commitPayload);
 
                             // Update Ref
-                            await octokit.git.updateRef({
-                                owner,
-                                repo: cleanRepoName,
-                                ref: `heads/${defaultBranch}`,
-                                sha: newCommit.sha,
-                                force: true
-                            });
+                            try {
+                                await octokit.git.updateRef({
+                                    owner,
+                                    repo: cleanRepoName,
+                                    ref: `heads/${defaultBranch}`,
+                                    sha: newCommit.sha,
+                                    force: true
+                                });
+                            } catch (upErr) {
+                                // If ref doesn't exist yet, create it
+                                await octokit.git.createRef({
+                                    owner,
+                                    repo: cleanRepoName,
+                                    ref: `refs/heads/${defaultBranch}`,
+                                    sha: newCommit.sha
+                                });
+                            }
 
                             filesCommittedCount = treeEntries.length;
                             console.log(`✅ [GitHub API] Pushed ${filesCommittedCount} codebase files! Commit: ${newCommit.sha}`);
@@ -220,20 +256,23 @@ export async function POST(request) {
             repoName: cleanRepoName,
             serviceType,
             assignedAccountId: targetAccountId,
-            githubUrl: githubUrl || `https://github.com/iq4u8/${cleanRepoName}`,
+            githubUrl: githubUrl || `https://github.com/Coras-Multiverse/${cleanRepoName}`,
+            envs: envMap,
             deploymentStatus: 'ACTIVE',
             liveUrl: liveDomain
-        }).catch(() => ({ repoName: cleanRepoName, deploymentStatus: 'ACTIVE' }));
-
-        return NextResponse.json({ 
-            success: true, 
-            repository: saved,
-            repoName: cleanRepoName,
-            githubCreated: repoCreatedOnGitHub,
-            filesCommittedCount,
-            assignedAccountId: targetAccountId
         });
+
+        return NextResponse.json({
+            success: true,
+            repo: saved,
+            repoName: cleanRepoName,
+            filesCommittedCount,
+            githubLive: repoCreatedOnGitHub,
+            message: `Deployed ${cleanRepoName} to GitHub (${filesCommittedCount} files) and queued into Railway account ${targetAccountId || 'Unassigned'}`
+        });
+
     } catch (e) {
+        console.error('API /api/repos POST Error:', e);
         return NextResponse.json({ success: false, error: e.message }, { status: 500 });
     }
 }
