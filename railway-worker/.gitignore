@@ -1,9 +1,0 @@
-node_modules/
-sessions/
-.env
-.env.local
-*.log
-telegram_bot.js.bak
-update_bot.py
-__pycache__/
-*.pyc

@@ -1,0 +1,7 @@
+{
+  "domains": [
+    "mailu.site"
+  ],
+  "defaultDomain": "mailu.site",
+  "authorizedUsers": []
+}

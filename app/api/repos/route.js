@@ -16,20 +16,7 @@ export async function GET() {
             liveUrl: r.live_url
         }));
 
-        let githubCount = mapped.length;
-        try {
-            let token = await getRemoteConfig('GITHUB_TOKEN');
-            if (!token || token.trim() === '') token = process.env.GITHUB_TOKEN;
-            if (token && !token.includes('your_github_personal_access_token')) {
-                const octokit = new Octokit({ auth: token });
-                const { data: ghRepos } = await octokit.repos.listForAuthenticatedUser({ per_page: 100 });
-                if (Array.isArray(ghRepos)) {
-                    githubCount = ghRepos.length;
-                }
-            }
-        } catch (e) {
-            // fallback to mapped count if GitHub API is unreachable
-        }
+        const githubCount = mapped.length;
 
         const deadCount = mapped.filter(r => 
             ['FAILED', 'DEAD', 'CRASHED', 'ERROR'].includes((r.deploymentStatus || '').toUpperCase())

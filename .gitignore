@@ -25,3 +25,7 @@ yarn-error.log*
 Thumbs.db
 .idea/
 .vscode/
+
+# Browser profiles and cached tokens
+sessions/
+.mailu_tokens.json

