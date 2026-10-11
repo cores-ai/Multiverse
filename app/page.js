@@ -5,7 +5,8 @@ import {
   LayoutDashboard, HardDrive, Layers, Key, Shield, Terminal, 
   Plus, RefreshCw, ExternalLink, Play, Radio, Cpu, Zap, 
   CheckCircle2, AlertTriangle, ArrowUpRight, Lock, Activity,
-  Globe, Search, ChevronRight, ChevronDown, Server, Trash2, Cloud, Database, Sliders, X, Menu
+  Globe, Search, ChevronRight, ChevronDown, Server, Trash2, Cloud, Database, Sliders, X, Menu,
+  UploadCloud, FileText, Check
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import SpiderNetwork from '@/components/SpiderNetwork';
@@ -100,6 +101,12 @@ export default function OwnerManagementDashboard() {
   const [newRepoType, setNewRepoType] = useState('HEAVY');
   const [newRepoEnvs, setNewRepoEnvs] = useState('TELEGRAM_BOT_TOKEN=vault_token_here\nTELEGRAM_CHAT_ID=123456789\nLOGGER_MODE=autonomous');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [repoFile, setRepoFile] = useState(null);
+  const [envFile, setEnvFile] = useState(null);
+  const [isRepoDragging, setIsRepoDragging] = useState(false);
+  const [isEnvDragging, setIsEnvDragging] = useState(false);
+  const repoFileInputRef = useRef(null);
+  const envFileInputRef = useRef(null);
 
   const [newAccountEmail, setNewAccountEmail] = useState('');
   const [newAccountToken, setNewAccountToken] = useState('');
@@ -241,10 +248,37 @@ export default function OwnerManagementDashboard() {
     healthStatusText = 'Server pura healthy hai, balanced hai';
   }
 
+  // Drag and Drop File Handlers for Deploy Modal
+  const handleProcessRepoFile = (file) => {
+    if (!file) return;
+    const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+    setRepoFile({
+      name: file.name,
+      size: (file.size / 1024).toFixed(1) + ' KB'
+    });
+    setNewRepoName(cleanName || 'deployed-service');
+  };
+
+  const handleProcessEnvFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target.result || '';
+      setNewRepoEnvs(content);
+      const lines = content.split('\n').filter(l => l.trim() && l.includes('='));
+      setEnvFile({
+        name: file.name,
+        keysCount: lines.length
+      });
+    };
+    reader.readAsText(file);
+  };
+
   // Handlers
   const handleDeploySubmit = async (e) => {
     e.preventDefault();
-    if (!newRepoName.trim()) return;
+    const finalRepoName = newRepoName.trim() || (repoFile ? repoFile.name.replace(/\.[^/.]+$/, '') : 'ghost-service');
+    if (!finalRepoName) return;
     setIsSubmitting(true);
 
     try {
@@ -261,11 +295,11 @@ export default function OwnerManagementDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          repoName: newRepoName.trim(),
+          repoName: finalRepoName,
           serviceType: newRepoType,
           envVariables: envObj,
           files: {
-            'README.md': `# ${newRepoName}\nDeployed via GhostVPS Owner Management Console.`
+            'README.md': `# ${finalRepoName}\nDeployed via GhostVPS Owner Management Console.`
           }
         })
       });
@@ -1975,45 +2009,87 @@ export default function OwnerManagementDashboard() {
             </div>
 
             <form onSubmit={handleDeploySubmit}>
-              <div className="form-group-block">
-                <label className="form-label-title">Repository / Service Name</label>
+              {/* Step 1: Drag & Drop Repository Card */}
+              <div className="form-group-block" style={{ marginBottom: '14px' }}>
                 <input
-                  type="text"
-                  className="form-input-box"
-                  placeholder="ghost-telegram-bot"
-                  value={newRepoName}
-                  onChange={e => setNewRepoName(e.target.value)}
-                  required
+                  type="file"
+                  ref={repoFileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    if (e.target.files?.[0]) handleProcessRepoFile(e.target.files[0]);
+                  }}
                 />
-              </div>
-
-              <div className="form-group-block">
-                <label className="form-label-title">Container Service Profile</label>
-                <select
-                  className="form-select-box"
-                  value={newRepoType}
-                  onChange={e => setNewRepoType(e.target.value)}
+                <div 
+                  className={`deploy-drag-card ${isRepoDragging ? 'is-dragging' : ''} ${repoFile ? 'has-file' : ''}`}
+                  onClick={() => repoFileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setIsRepoDragging(true); }}
+                  onDragLeave={() => setIsRepoDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsRepoDragging(false);
+                    if (e.dataTransfer.files?.[0]) handleProcessRepoFile(e.dataTransfer.files[0]);
+                  }}
                 >
-                  <option value="HEAVY">HEAVY (Headless Browser / Playwright / Telegram Bot)</option>
-                  <option value="LIGHT">LIGHT (Fastify / Webhook Relay / Micro API)</option>
-                </select>
-              </div>
-
-              <div className="form-group-block">
-                <label className="form-label-title">Environment Variables (Encrypted via AES-256)</label>
-                <textarea
-                  className="form-textarea-box"
-                  rows={6}
-                  value={newRepoEnvs}
-                  onChange={e => setNewRepoEnvs(e.target.value)}
-                  placeholder="KEY=VALUE"
-                ></textarea>
-                <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  KEY=VALUE per line. Automatically encrypted before saving.
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <UploadCloud size={20} color={repoFile ? '#10B981' : '#00F0FF'} />
+                    <span className="deploy-drag-title">
+                      {repoFile ? 'Repository Attached' : 'Upload Your Repo'}
+                    </span>
+                  </div>
+                  {repoFile ? (
+                    <div className="deploy-drag-badge">
+                      <Check size={12} />
+                      <span>{repoFile.name} ({repoFile.size})</span>
+                    </div>
+                  ) : (
+                    <span className="deploy-drag-subtitle">
+                      Drag & Drop repository archive (.zip, folder) or click to browse
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+              {/* Step 2: Drag & Drop Secrets / Env / Credentials Card */}
+              <div className="form-group-block" style={{ marginBottom: '18px' }}>
+                <input
+                  type="file"
+                  ref={envFileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    if (e.target.files?.[0]) handleProcessEnvFile(e.target.files[0]);
+                  }}
+                />
+                <div 
+                  className={`deploy-drag-card ${isEnvDragging ? 'is-dragging' : ''} ${envFile ? 'has-file' : ''}`}
+                  onClick={() => envFileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setIsEnvDragging(true); }}
+                  onDragLeave={() => setIsEnvDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsEnvDragging(false);
+                    if (e.dataTransfer.files?.[0]) handleProcessEnvFile(e.dataTransfer.files[0]);
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Key size={18} color={envFile ? '#10B981' : '#38BDF8'} />
+                    <span className="deploy-drag-title">
+                      {envFile ? 'Secrets & Credentials Loaded' : 'Upload Secrets / Env / Credentials'}
+                    </span>
+                  </div>
+                  {envFile ? (
+                    <div className="deploy-drag-badge">
+                      <Check size={12} />
+                      <span>{envFile.name} ({envFile.keysCount} keys detected)</span>
+                    </div>
+                  ) : (
+                    <span className="deploy-drag-subtitle">
+                      Drag & Drop .env or credentials file or click to browse
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
                 <button type="button" className="btn-action-dark" onClick={() => setShowDeployModal(false)}>
                   Cancel
                 </button>
