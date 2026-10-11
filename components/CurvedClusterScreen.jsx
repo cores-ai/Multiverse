@@ -256,7 +256,10 @@ export default function CurvedClusterScreen({
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontFamily: 'var(--font-mono, monospace)', flexShrink: 0 }}>
             <span style={{ color: '#94A3B8', fontWeight: 600 }}>database :</span>
             <span style={{ color: '#C084FC', fontWeight: 800, background: 'rgba(192, 132, 252, 0.1)', padding: '1px 5px', borderRadius: '3px', border: '1px solid rgba(192, 132, 252, 0.25)' }}>
-              {parseInt(databaseCount || databaseAccounts.length || repos.length || 0) < 10 ? `0${parseInt(databaseCount || databaseAccounts.length || repos.length || 0)}` : `${parseInt(databaseCount || databaseAccounts.length || repos.length || 0)}`}
+              {(() => {
+                const cnt = (repos && repos.length > 0) ? (databaseCount || repos.length) : (databaseAccounts && databaseAccounts.length > 0 ? databaseAccounts.length : 0);
+                return cnt < 10 ? `0${cnt}` : `${cnt}`;
+              })()}
             </span>
           </div>
 

@@ -83,96 +83,10 @@ export default function OwnerManagementDashboard() {
   const prevAccountsLengthRef = useRef(0);
 
   // Storage fleet state (Cloudflare R2: 10 GB Free Storage Quota per Cluster)
-  const [storageAccounts, setStorageAccounts] = useState([
-    {
-      accountId: 'r2_vault_ghost_bot',
-      storageId: 'r2_vault_ghost_bot',
-      clusterName: 'ghost-telegram-bot',
-      bucketName: 'r2-ghost-telegram-bot',
-      provider: 'Cloudflare R2',
-      cfAccountId: 'cf_7894a9f2bc0e1189',
-      accessKeyId: 'cf_r2_access_ghost_9801',
-      accessKeyIdMasked: 'cf_r••••••••9801',
-      secretAccessKeyMasked: 'cf_r••••••••74a01',
-      endpoint: 'https://cf_7894a9f2bc0e1189.r2.cloudflarestorage.com/r2-ghost-telegram-bot',
-      storageUsedGb: 0.42,
-      storageLimitGb: 10.0,
-      status: 'active'
-    },
-    {
-      accountId: 'r2_vault_relay_svc',
-      storageId: 'r2_vault_relay_svc',
-      clusterName: 'webhook-relay-service',
-      bucketName: 'r2-webhook-relay-service',
-      provider: 'Cloudflare R2',
-      cfAccountId: 'cf_7894a9f2bc0e1189',
-      accessKeyId: 'cf_r2_access_relay_4412',
-      accessKeyIdMasked: 'cf_r••••••••4412',
-      secretAccessKeyMasked: 'cf_r••••••••3b44',
-      endpoint: 'https://cf_7894a9f2bc0e1189.r2.cloudflarestorage.com/r2-webhook-relay-service',
-      storageUsedGb: 1.15,
-      storageLimitGb: 10.0,
-      status: 'active'
-    },
-    {
-      accountId: 'r2_vault_api_gw',
-      storageId: 'r2_vault_api_gw',
-      clusterName: 'api-gateway-core',
-      bucketName: 'r2-api-gateway-core',
-      provider: 'Cloudflare R2',
-      cfAccountId: 'cf_7894a9f2bc0e1189',
-      accessKeyId: 'cf_r2_access_gateway_7731',
-      accessKeyIdMasked: 'cf_r••••••••7731',
-      secretAccessKeyMasked: 'cf_r••••••••7c77',
-      endpoint: 'https://cf_7894a9f2bc0e1189.r2.cloudflarestorage.com/r2-api-gateway-core',
-      storageUsedGb: 0.28,
-      storageLimitGb: 10.0,
-      status: 'active'
-    }
-  ]);
+  const [storageAccounts, setStorageAccounts] = useState([]);
 
   // Database fleet state (Neon PostgreSQL, Upstash Redis, MongoDB Atlas)
-  const [databaseAccounts, setDatabaseAccounts] = useState([
-    {
-      accountId: 'db_vault_ghost_pg',
-      dbId: 'db_vault_ghost_pg',
-      clusterName: 'ghost-telegram-bot',
-      dbName: 'ghost_primary_db',
-      engine: 'PostgreSQL 16 (Neon)',
-      host: 'ep-cool-fog-9912.us-east-2.aws.neon.tech',
-      database: 'ghost_bot_production',
-      connectionStringMasked: 'post••••••••8912',
-      sslMode: 'require',
-      storageUsedGb: 0.12,
-      status: 'active'
-    },
-    {
-      accountId: 'db_vault_relay_redis',
-      dbId: 'db_vault_relay_redis',
-      clusterName: 'webhook-relay-service',
-      dbName: 'redis_queue_mesh',
-      engine: 'Redis 7.2 (Upstash)',
-      host: 'us1-swift-marlin-40112.upstash.io',
-      database: 'default',
-      connectionStringMasked: 'redi••••••••9934',
-      sslMode: 'rediss',
-      storageUsedGb: 0.05,
-      status: 'active'
-    },
-    {
-      accountId: 'db_vault_gateway_mongo',
-      dbId: 'db_vault_gateway_mongo',
-      clusterName: 'api-gateway-core',
-      dbName: 'gateway_mongo_store',
-      engine: 'MongoDB 7.0 (Atlas)',
-      host: 'cluster0.iq4u8.mongodb.net',
-      database: 'megaserver',
-      connectionStringMasked: 'mong••••••••1102',
-      sslMode: 'require',
-      storageUsedGb: 0.45,
-      status: 'active'
-    }
-  ]);
+  const [databaseAccounts, setDatabaseAccounts] = useState([]);
 
   // Modals
   const [showDeployModal, setShowDeployModal] = useState(false);
