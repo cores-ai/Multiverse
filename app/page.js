@@ -18,7 +18,7 @@ export default function OwnerManagementDashboard() {
   const [activeModule, setActiveModule] = useState('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [openSections, setOpenSections] = useState({
-    server: true,
+    server: false,
     storage: false,
     database: false,
     management: false

@@ -73,6 +73,26 @@ button { font-family: inherit; }
   padding: 22px 16px 42px;
   z-index: 50;
   box-shadow: 10px 0 30px rgba(0, 0, 0, 0.4);
+  transition: width 0.28s cubic-bezier(0.25, 0.1, 0.25, 1),
+              min-width 0.28s cubic-bezier(0.25, 0.1, 0.25, 1),
+              margin-left 0.28s cubic-bezier(0.25, 0.1, 0.25, 1),
+              padding 0.28s cubic-bezier(0.25, 0.1, 0.25, 1),
+              opacity 0.2s ease,
+              visibility 0.28s ease;
+}
+
+/* Collapsed State (Default Closed) */
+.app-sidebar.is-collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  margin-left: -260px !important;
+  padding: 0 !important;
+  border-right: none !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .sidebar-header {
