@@ -100,20 +100,24 @@ export default function WorkerCanvas({
     }
   }, [repos, accounts, isGenerating]);
 
-  // Autonomous Train Trigger: Automatically runs when repo or env is uploaded/updated from backend
-  const prevCountRef = useRef({ accs: (accounts || []).length, repos: (repos || []).length });
+  // Autonomous Train Trigger: When repos are explicitly added later
+  const prevCountRef = useRef({ accs: (accounts || []).length, repos: (repos || []).length, initial: true });
   useEffect(() => {
+    if (prevCountRef.current.initial) {
+      prevCountRef.current = { accs: (accounts || []).length, repos: (repos || []).length, initial: false };
+      return;
+    }
     const prev = prevCountRef.current;
     const curAccs = (accounts || []).length;
     const curRepos = (repos || []).length;
-    if (curRepos > prev.repos) {
+    if (curRepos > prev.repos && !isGenerating) {
       handleGenerateCluster();
     } else if (curAccs > prev.accs) {
       setTrainTransition('transform 2.6s cubic-bezier(0.25, 0.1, 0.25, 1)');
       dispatchTrain('right', 'transform 2.6s cubic-bezier(0.25, 0.1, 0.25, 1)');
     }
-    prevCountRef.current = { accs: curAccs, repos: curRepos };
-  }, [accounts, repos, dispatchTrain]);
+    prevCountRef.current = { accs: curAccs, repos: curRepos, initial: false };
+  }, [accounts, repos, isGenerating, dispatchTrain]);
 
   // Edit Panel State
   const [editingCardId, setEditingCardId] = useState(null);
