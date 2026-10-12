@@ -13,8 +13,8 @@ export async function POST(request) {
             return NextResponse.json({ success: false, error: 'Unauthorized webhook request' }, { status: 401 });
         }
 
-        if (!apiToken) {
-            return NextResponse.json({ success: false, error: 'apiToken is required' }, { status: 400 });
+        if (!apiToken || apiToken.includes('undefined') || apiToken.includes('fallback') || apiToken.startsWith('rly_tok_mv4') || apiToken.startsWith('rly_tok_live_test')) {
+            return NextResponse.json({ success: false, error: 'Only genuine harvested Railway API tokens are allowed. Premature cards blocked.' }, { status: 400 });
         }
 
         // 1. Sanitize email to enforce strictly letters and numbers (no _ or .)

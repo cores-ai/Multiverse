@@ -434,28 +434,12 @@ export default function WorkerCanvas({
       // Train stays at Railway until account creation completes
       await sleep(4800);
 
-      // Step 8: Account verified & token generated! Train returns Right -> Center (Cluster Core)
-      // Card is ONLY generated in database and rendered here after verified token
+      // Step 8: Train returns Right -> Center (Cluster Core)
+      // The actual card is created ONLY by the Playwright worker via backend webhook once the real token is verified.
       setTrainTransition('transform 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('middle');
       setClusterStepText(`8/8 • Fleet Node Ready (${targetRepoName})`);
       setGenProgress(100);
-
-      // Automatically register the verified account in Middleman backend & Cloudflare D1
-      try {
-        const verifiedToken = `rly_tok_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
-        await fetch('/api/webhooks/account-ready', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: tempEmail,
-            apiToken: verifiedToken,
-            secretKey: 'mega-server-jit-worker-secret-2026'
-          })
-        });
-      } catch (regErr) {
-        console.warn('Account ready post notice:', regErr.message);
-      }
 
       if (onRefresh) {
         await onRefresh();
