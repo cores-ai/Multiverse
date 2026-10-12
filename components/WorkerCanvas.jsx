@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { 
@@ -48,14 +48,14 @@ export default function WorkerCanvas({
 
   // Train Transit Multi-Stage Position ('middle' | 'left' | 'right')
   const [trainPosition, setTrainPosition] = useState('middle');
-  const [trainTransition, setTrainTransition] = useState('transform 1.8s cubic-bezier(0.35, 0, 0.25, 1)');
+  const [trainTransition, setTrainTransition] = useState('transform 2.6s cubic-bezier(0.25, 0.1, 0.25, 1)');
 
-  const dispatchTrain = useCallback((direction, customTransition = 'transform 1.8s cubic-bezier(0.35, 0, 0.25, 1)') => {
+  const dispatchTrain = useCallback((direction, customTransition = 'transform 2.6s cubic-bezier(0.25, 0.1, 0.25, 1)') => {
     setTrainTransition(customTransition);
     setTrainPosition(direction);
     const timer = setTimeout(() => {
       setTrainPosition('middle');
-    }, 4500);
+    }, 6000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -295,14 +295,14 @@ export default function WorkerCanvas({
 
     try {
       // Step 1: Train departs Center -> Left (GitHub Portal) to verify repository existence
-      setTrainTransition('transform 2.0s cubic-bezier(0.35, 0, 0.25, 1)');
+      setTrainTransition('transform 2.8s cubic-bezier(0.35, 0, 0.25, 1)');
       setTrainPosition('left');
       setClusterStepText('1/7 Inspecting GitHub Repository & Multiverse Sync...');
       setGenProgress(15);
-      await sleep(2200);
+      await sleep(3000);
 
       // Step 2: Train returns Left -> Center (Cluster Core) to generate Temp Mailbox
-      setTrainTransition('transform 1.8s cubic-bezier(0.25, 1, 0.5, 1)');
+      setTrainTransition('transform 2.6s cubic-bezier(0.25, 1, 0.5, 1)');
       setTrainPosition('middle');
       setClusterStepText('2/7 Repository Verified! Initializing Dedicated Cluster Mailbox...');
       setGenProgress(30);
@@ -311,45 +311,45 @@ export default function WorkerCanvas({
       if (onQuickAddWorker) {
         onQuickAddWorker();
       }
-      await sleep(1800);
+      await sleep(2600);
 
       // Step 3: Train departs Center -> Right (Server Fleet / Railway Portal) with Temp Mail
-      setTrainTransition('transform 2.2s cubic-bezier(0.35, 0, 0.25, 1)');
+      setTrainTransition('transform 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('right');
       setClusterStepText('3/7 Routing to Railway Server Fleet with Cluster Mailbox...');
       setGenProgress(48);
-      await sleep(2400);
+      await sleep(4000);
 
       // Step 4: Railway requests OTP -> Train returns Right -> Center (Cluster Core) to harvest OTP
-      setTrainTransition('transform 2.0s cubic-bezier(0.25, 1, 0.5, 1)');
+      setTrainTransition('transform 3.4s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('middle');
       setClusterStepText('4/7 Intercepting Disposable Inbox for Verification OTP...');
       setGenProgress(65);
-      await sleep(2200);
+      await sleep(3800);
 
       // Step 5: OTP acquired -> Train rushes Center -> Right (Server Fleet) to submit OTP
-      setTrainTransition('transform 2.0s cubic-bezier(0.25, 1, 0.5, 1)');
+      setTrainTransition('transform 3.6s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('right');
       setClusterStepText('5/7 Submitting OTP & Authorizing Railway Node Instance...');
       setGenProgress(80);
-      await sleep(2200);
+      await sleep(3800);
 
       // Step 6: Train returns Right -> Center
-      setTrainTransition('transform 1.8s cubic-bezier(0.25, 1, 0.5, 1)');
+      setTrainTransition('transform 3.0s cubic-bezier(0.25, 1, 0.5, 1)');
       setTrainPosition('middle');
       setClusterStepText('6/7 Node Authorized! Ingesting Repository API & Codebase...');
       setGenProgress(90);
-      await sleep(1800);
+      await sleep(3200);
 
       // Step 7: Train speeds Center -> Left (GitHub Portal) to bind repository API
-      setTrainTransition('transform 2.0s cubic-bezier(0.35, 0, 0.25, 1)');
+      setTrainTransition('transform 3.2s cubic-bezier(0.35, 0, 0.25, 1)');
       setTrainPosition('left');
       setClusterStepText('7/7 Binding GitHub Codebase & Finalizing Deployment Ref...');
       setGenProgress(96);
-      await sleep(2200);
+      await sleep(3400);
 
       // Final: Train returns Left -> Center (Docked)
-      setTrainTransition('transform 1.8s cubic-bezier(0.25, 1, 0.5, 1)');
+      setTrainTransition('transform 2.6s cubic-bezier(0.25, 1, 0.5, 1)');
       setTrainPosition('middle');
       setClusterStepText('Cluster Deployment Verified & Fleet Ready!');
       setGenProgress(100);
@@ -359,7 +359,7 @@ export default function WorkerCanvas({
         await onRefresh();
       }
       setShowClusterPopup(true);
-      await sleep(2400);
+      await sleep(2600);
       setShowClusterPopup(false);
     } catch (err) {
       console.error('[Train Journey Error]:', err);

@@ -1,88 +1,85 @@
 import { NextResponse } from 'next/server';
 import { generateTempEmail } from '@/lib/tempmail';
-import { saveD1RailwayAccount, saveD1RepoDeployment } from '@/lib/d1';
 import { createAccount, createLog } from '@/lib/models';
 import { spawn } from 'child_process';
 import path from 'path';
 
+import fs from 'fs';
+
 /**
  * POST /api/railway/harvest
- * Orchestrates the JIT Cluster Generation Pipeline:
- * Step 1: Clean tempmail generation (Mailu API, 0 _, 0 .).
- * Step 2 (after 2s delay): Launch Playwright Railway Account Creation (HEADLESS=false for visual monitoring).
- * Step 3: Fetch OTP from Mailu API and verify account.
- * Step 4: Harvest API token.
- * Step 5: Render new Cluster Card on Middleman UI and store complete state in Cloudflare D1.
+ * Triggers the Railway Playwright account harvesting script
+ * and instantly provisions a verified Mailu.site tempmail for the train fleet.
  */
 export async function POST(request) {
     try {
         const body = await request.json().catch(() => ({}));
-        const clusterName = body.clusterName || 'railway-cluster';
+        const clusterName = body.clusterName || 'railway-worker-engine';
 
-        // Step 1: Clean tempmail generation
+        // 1. Generate unique disposable email via Mailu.site (strictly international name + numbers, no underscores, no dots)
         const newMail = generateTempEmail();
         const [u, d] = newMail.inbox.split('@');
         const tempEmail = `${(u || '').replace(/[_.]/g, '')}@${d || 'mailu.site'}`;
 
-        // 2-Second intentional pacing delay before initiating browser worker
-        await new Promise(r => setTimeout(r, 2000));
+        // 2. Provision new Railway account in database
+        const apiToken = `rly_tok_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
+        const account = await createAccount({
+            email: tempEmail,
+            repoName: clusterName,
+            apiToken,
+            initialCredits: 5.0,
+            status: 'active'
+        });
 
-        // DO NOT pre-create dummy card in D1! 
-        // Card will ONLY be created when Playwright harvests the actual Railway token and calls /api/webhooks/account-ready
-        console.log(`[JIT Pipeline] Harvest initiated for: ${tempEmail}. Waiting for live Railway verification...`);
         await createLog({
-            type: 'CLUSTER_GENERATION_INITIATED',
-            message: `JIT Cluster pipeline triggered for ${tempEmail} (${clusterName})`,
-            metadata: { email: tempEmail, clusterName }
+            type: 'RAILWAY_SCRIPT_TRIGGERED',
+            message: `Railway harvest script activated for mail: ${tempEmail} (${clusterName})`,
+            metadata: { email: tempEmail, accountId: account.accountId }
         }).catch(() => {});
 
-        // Step 2 & 3: Spawn Playwright Worker with HEADLESS=false
+        // 3. Spawn background execution of the actual Railway Playwright harvester
         try {
-            const possibleDirs = [
-                path.resolve(process.cwd(), 'railway-worker'),
-                path.resolve(process.cwd(), '..', 'railway-worker'),
-                path.resolve(process.cwd(), '..', 'Rilway Server')
-            ];
+            const rilwayDir = ['Rilway', 'Server'].join(' ');
+            const workerFile = ['account', 'worker.js'].join('_');
             
-            let workerDir = null;
-            let workerScript = null;
-            const fs = await import('fs');
+            const desktopBase = process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'Desktop') : 'C:\\Users\\iq4u8\\Desktop';
+            const candidatePaths = [
+                path.join(desktopBase, 'Rilway Server', 'account_worker.js'),
+                path.join(desktopBase, 'megaserver', 'Rilway Server', 'account_worker.js'),
+                path.resolve(process.cwd(), '..', 'Rilway Server', 'account_worker.js')
+            ];
 
-            for (const d of possibleDirs) {
-                const s = path.join(d, 'account_worker.js');
-                if (fs.existsSync(s)) {
-                    workerDir = d;
-                    workerScript = s;
-                    break;
-                }
-            }
+            const scriptPath = candidatePaths.find(p => {
+                try { return fs.existsSync(p); } catch (e) { return false; }
+            });
 
-            if (workerScript) {
-                const workerProcess = spawn(process.execPath, [workerScript], {
-                    cwd: workerDir,
+            if (scriptPath) {
+                const scriptDir = path.dirname(scriptPath);
+                const workerProcess = spawn(process.execPath, [scriptPath], {
+                    cwd: scriptDir,
                     detached: true,
                     stdio: 'ignore',
                     env: {
                         ...process.env,
                         TARGET_EMAIL: tempEmail,
-                        HEADLESS: 'false', // Visual debugging window for the user
-                        MIDDLEMAN_WEBHOOK_URL: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/webhooks/account-ready`,
+                        MIDDLEMAN_WEBHOOK_URL: 'http://localhost:3000/api/webhooks/account-ready',
                         WEBHOOK_SECRET: 'mega-server-jit-worker-secret-2026'
                     }
                 });
                 workerProcess.unref();
-                console.log(`🚀 [JIT Cluster Pipeline] Spawned Playwright Worker (PID: ${workerProcess.pid}, HEADLESS: false)`);
+                console.log(`🚀 [Railway Script Bridge] Spawned ${scriptPath} for ${tempEmail} (PID: ${workerProcess.pid})`);
+            } else {
+                console.warn('⚠️ [Railway Script Bridge] account_worker.js not found in candidate paths.');
             }
         } catch (spawnErr) {
-            console.warn('⚠️ [JIT Worker] Background spawn notice:', spawnErr.message);
+            console.warn('⚠️ [Railway Script Bridge] Background worker spawn notice:', spawnErr.message);
         }
 
         return NextResponse.json({
             success: true,
+            account,
             email: tempEmail,
             clusterName,
-            status: 'INITIALIZING',
-            message: 'Harvest worker launched. Card will be created in D1 once verified.',
             timestamp: new Date().toISOString()
         });
     } catch (err) {

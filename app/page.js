@@ -1508,6 +1508,15 @@ export default function OwnerManagementDashboard() {
                           <span>Live URL</span>
                         </a>
                       )}
+                      <button 
+                        className="btn-action-dark" 
+                        onClick={() => handleDeleteRepo(r.repoName)} 
+                        title="Delete Repository from GitHub & Database"
+                        style={{ color: '#EF4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                      >
+                        <Trash2 size={13} color="#EF4444" />
+                        <span>Delete Repo</span>
+                      </button>
                     </div>
                   </div>
                 ))
@@ -1621,10 +1630,21 @@ export default function OwnerManagementDashboard() {
                       </div>
                     </div>
 
-                    <button className="btn-action-cyan" onClick={() => openEnvEditor(r)}>
-                      <Key size={13} />
-                      <span>Manage Encrypted Envs</span>
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <button className="btn-action-cyan" onClick={() => openEnvEditor(r)}>
+                        <Key size={13} />
+                        <span>Manage Encrypted Envs</span>
+                      </button>
+                      <button 
+                        className="btn-action-dark" 
+                        onClick={() => handleDeleteRepo(r.repoName)} 
+                        title="Delete Repository & Envs from Database"
+                        style={{ color: '#EF4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                      >
+                        <Trash2 size={13} color="#EF4444" />
+                        <span>Delete Repo</span>
+                      </button>
+                    </div>
                   </div>
                 ))
               )}

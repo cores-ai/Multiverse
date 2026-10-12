@@ -1,5 +1,5 @@
-﻿import { NextResponse } from 'next/server';
-import { getRepositories, saveRepository } from '@/lib/models';
+import { NextResponse } from 'next/server';
+import { getRepositories, saveRepository, deleteRepository } from '@/lib/models';
 import { 
     getD1RepoDeployments, 
     saveD1RepoDeployment, 
@@ -428,6 +428,13 @@ export async function DELETE(request) {
             await queryD1('DELETE FROM database_accounts WHERE cluster_name = ? OR db_name = ? OR db_id = ?;', [cleanRepoName, `${cleanRepoName}_db`, `db_${cleanRepoName}`]);
         } catch (d1Err) {
             console.error('[D1 Delete Purge Error]:', d1Err.message);
+        }
+
+        // 3. Clean up MongoDB models (repo, encrypted env variables, and database accounts)
+        try {
+            await deleteRepository(cleanRepoName);
+        } catch (mErr) {
+            console.warn('[MongoDB Delete Notice]:', mErr.message);
         }
 
         return NextResponse.json({
