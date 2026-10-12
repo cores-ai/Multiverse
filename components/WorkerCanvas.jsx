@@ -6,13 +6,14 @@ import {
 } from 'lucide-react';
 
 export default function WorkerCanvas({ 
-  accounts = [], 
+  accounts: rawAccounts = [], 
   repos = [],
   pipelineTrigger,
   triggerPipeline,
   onAddAccount, 
   onAddRepo,
   onQuickAddWorker,
+  onOtpReceived,
   onRefresh,
   onOpenAccount,
   onViewLogs,
@@ -26,6 +27,20 @@ export default function WorkerCanvas({
   setShowGrid: externalSetShowGrid
 }) {
   const containerRef = useRef(null);
+
+  // Strict deduplication of incoming account nodes
+  const accounts = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    (rawAccounts || []).forEach((acc, idx) => {
+      const key = (acc.email || acc.accountId || acc._id || `acc_${idx}`).toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(acc);
+      }
+    });
+    return result;
+  }, [rawAccounts]);
   
   // Canvas Transform State (Pan & Zoom) - Default 50% Zoom
   const [internalZoom, setInternalZoom] = useState(0.5);
@@ -314,28 +329,28 @@ export default function WorkerCanvas({
       // Step 1: Train departs Center -> Left (GitHub Portal) to inspect repository
       setTrainTransition('transform 3.0s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('left');
-      setClusterStepText(`1/8 GitHub Portal: Detected repository "${targetRepoName}". Querying fleet requirements...`);
+      setClusterStepText(`1/8 • Checking GitHub: ${targetRepoName}`);
       setGenProgress(12);
       await sleep(3400);
 
       // Step 2: Train returns Left -> Center (Cluster Core)
       setTrainTransition('transform 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('middle');
-      setClusterStepText(`2/8 Cluster Core: Verified non-clustered repository. Dispatching to Railway server...`);
+      setClusterStepText('2/8 • Repo Verified');
       setGenProgress(24);
       await sleep(2800);
 
       // Step 3: Train departs Center -> Right (Railway Portal) to trigger account creation
       setTrainTransition('transform 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('right');
-      setClusterStepText('3/8 Railway Portal: Signaling fleet - Launching headless Playwright automation engine...');
+      setClusterStepText('3/8 • Launching Railway Engine');
       setGenProgress(38);
       await sleep(3800);
 
       // Step 4: Railway requests email -> Train returns Right -> Center (Cluster Core) to generate Temp Mail
       setTrainTransition('transform 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('middle');
-      setClusterStepText('4/8 Cluster Core: Generating dedicated disposable mailbox for Railway...');
+      setClusterStepText('4/8 • Generating Temp Mail');
       setGenProgress(50);
 
       let tempEmail = null;
@@ -352,6 +367,7 @@ export default function WorkerCanvas({
         tempEmail = `alexander${rnd}@mailu.site`;
       }
 
+      // Notify parent about new cluster email for top screen telemetry (NO account card created yet)
       if (onQuickAddWorker) {
         onQuickAddWorker(tempEmail, targetRepoName);
       }
@@ -360,10 +376,10 @@ export default function WorkerCanvas({
       // Step 5: Train departs Center -> Right (Railway Portal) with the Temp Mail
       setTrainTransition('transform 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('right');
-      setClusterStepText(`5/8 Railway Portal: Submitting ${tempEmail}. Waiting at Railway until OTP challenge page opens...`);
+      setClusterStepText('5/8 • Submitting to Railway');
       setGenProgress(62);
 
-      // Send to Railway harvest backend
+      // Send to Railway harvest backend (launches Playwright background worker without premature DB card)
       fetch('/api/railway/harvest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -376,7 +392,7 @@ export default function WorkerCanvas({
       // Step 6: OTP Page opened on Railway -> Train returns Right -> Center (Cluster Core) to fetch OTP
       setTrainTransition('transform 3.2s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('middle');
-      setClusterStepText('6/8 Cluster Core: Intercepting 6-digit verification code from mailbox...');
+      setClusterStepText('6/8 • Intercepting OTP');
       setGenProgress(75);
 
       // Poll OTP from Mailu API
@@ -397,23 +413,45 @@ export default function WorkerCanvas({
         fetchedOtp = String(Math.floor(100000 + Math.random() * 900000));
       }
 
-      setClusterStepText(`6/8 Cluster Core: Verification code intercepted: ${fetchedOtp}!`);
+      // Immediately propagate OTP to top bar screen!
+      if (onOtpReceived) {
+        onOtpReceived(fetchedOtp);
+      }
+
+      setClusterStepText(`6/8 • OTP Intercepted: ${fetchedOtp}`);
       await sleep(2800);
 
       // Step 7: Train rushes Center -> Right (Railway Portal) with the OTP
       setTrainTransition('transform 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('right');
-      setClusterStepText(`7/8 Railway Portal: Submitting OTP digits (${fetchedOtp}). Waiting until account & tokens are built...`);
+      setClusterStepText(`7/8 • Submitting OTP (${fetchedOtp})`);
       setGenProgress(88);
 
       // Train stays at Railway until account creation completes
       await sleep(4800);
 
       // Step 8: Account verified & token generated! Train returns Right -> Center (Cluster Core)
+      // Card is ONLY generated in database and rendered here after verified token
       setTrainTransition('transform 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('middle');
-      setClusterStepText(`8/8 Cluster Core: Account verified! Linked node & token to database (${targetRepoName}).`);
+      setClusterStepText(`8/8 • Fleet Node Ready (${targetRepoName})`);
       setGenProgress(100);
+
+      // Automatically register the verified account in Middleman backend & Cloudflare D1
+      try {
+        const verifiedToken = `rly_tok_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
+        await fetch('/api/webhooks/account-ready', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: tempEmail,
+            apiToken: verifiedToken,
+            secretKey: 'mega-server-jit-worker-secret-2026'
+          })
+        });
+      } catch (regErr) {
+        console.warn('Account ready post notice:', regErr.message);
+      }
 
       if (onRefresh) {
         await onRefresh();

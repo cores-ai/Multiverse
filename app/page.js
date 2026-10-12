@@ -79,6 +79,7 @@ export default function OwnerManagementDashboard() {
 
   // Latest Cluster & Temp Mail OLED telemetry state
   const [latestCluster, setLatestCluster] = useState(null);
+  const [currentOtp, setCurrentOtp] = useState(null);
   const [copiedMail, setCopiedMail] = useState(false);
   const [screenFlashed, setScreenFlashed] = useState(false);
   const prevAccountsLengthRef = useRef(0);
@@ -570,21 +571,6 @@ export default function OwnerManagementDashboard() {
         createdAt: new Date().toISOString(),
         status: 'INITIALIZING...'
       });
-
-      // Trigger Railway Harvest Pipeline (Harvests OTP and API Token)
-      const res = await fetch('/api/railway/harvest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: tempEmail,
-          clusterName: tempEmail,
-          repoName: targetRepo || repos[0]?.repoName || null
-        })
-      });
-      const data = await res.json();
-      console.log('[Cluster Generation Pipeline]', data);
-      
-      await fetchData();
     } catch (e) {
       console.error('Failed to auto-add worker:', e);
     } finally {
@@ -1205,6 +1191,7 @@ export default function OwnerManagementDashboard() {
               databaseCount={databaseAccounts.length}
               deadCount={deadRepoCount}
               latestCluster={latestCluster}
+              externalOtp={currentOtp}
               pingStatus={pingStatus}
               onQuickAddWorker={handleQuickAutoAddWorker}
               onRefresh={fetchData}
@@ -1227,6 +1214,7 @@ export default function OwnerManagementDashboard() {
               onAddAccount={() => setShowAccountModal(true)}
               onAddRepo={() => setShowDeployModal(true)}
               onQuickAddWorker={handleQuickAutoAddWorker}
+              onOtpReceived={(otp) => setCurrentOtp(otp)}
               onDeleteNode={handleDeleteAccount}
               onRefresh={fetchData}
               onOpenAccount={(acc) => setActiveModule('accounts')}

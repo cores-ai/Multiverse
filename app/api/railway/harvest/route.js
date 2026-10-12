@@ -27,41 +27,13 @@ export async function POST(request) {
             tempEmail = `${(u || '').replace(/[_.]/g, '')}@${d || 'mailu.site'}`;
         }
 
-        // 2. Provision new Railway account in database (both MongoDB and Cloudflare D1)
-        const apiToken = `rly_tok_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
-        const account = await createAccount({
-            email: tempEmail,
-            repoName: clusterName,
-            apiToken,
-            initialCredits: 5.0,
-            status: 'active'
-        });
-
-        // Sync directly to Cloudflare D1 railway_accounts
-        try {
-            await saveD1RailwayAccount({
-                account_id: account.accountId,
-                email: tempEmail,
-                api_token: apiToken,
-                status: 'ACTIVE',
-                credits_remaining: 5.0,
-                days_left: 30,
-                repos_count: targetRepoName ? 1 : 0,
-                max_capacity: 2
-            });
-
-            // If a repo was provided or exists unassigned, link it in D1
-            if (targetRepoName) {
-                await queryD1('UPDATE repo_deployments SET account_id = ? WHERE repo_name = ?;', [account.accountId, targetRepoName]).catch(() => {});
-            }
-        } catch (d1Err) {
-            console.warn('[D1 Sync Warning in harvest]:', d1Err.message);
-        }
-
+        // 2. We do NOT create premature account cards here!
+        // The account and its database card will ONLY be created once Railway account is fully created,
+        // verified, and its verified token is saved to the database linked to the repository.
         await createLog({
             type: 'RAILWAY_SCRIPT_TRIGGERED',
-            message: `Railway harvest script activated for mail: ${tempEmail} (${clusterName})`,
-            metadata: { email: tempEmail, accountId: account.accountId }
+            message: `Railway harvest worker triggered for mail: ${tempEmail} (${clusterName})`,
+            metadata: { email: tempEmail, targetRepo: targetRepoName }
         }).catch(() => {});
 
         // 3. Spawn background execution of the actual Railway Playwright harvester
@@ -104,9 +76,10 @@ export async function POST(request) {
 
         return NextResponse.json({
             success: true,
-            account,
+            status: 'HARVEST_INITIATED',
             email: tempEmail,
             clusterName,
+            targetRepo: targetRepoName,
             timestamp: new Date().toISOString()
         });
     } catch (err) {

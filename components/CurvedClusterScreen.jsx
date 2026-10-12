@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Copy, Check, RefreshCw, Key, ShieldCheck, Grid, Plus, Minus, UploadCloud } from 'lucide-react';
@@ -11,6 +11,7 @@ export default function CurvedClusterScreen({
   databaseCount = 0,
   deadCount = 0,
   latestCluster,
+  externalOtp = null,
   pingStatus = { latency: 38 },
   onQuickAddWorker,
   onRefresh,
@@ -21,11 +22,17 @@ export default function CurvedClusterScreen({
   onZoomOut,
   className = ''
 }) {
-  const [otp, setOtp] = useState(null);
+  const [otp, setOtp] = useState(externalOtp || null);
   const [isPolling, setIsPolling] = useState(false);
   const [copiedOtp, setCopiedOtp] = useState(false);
   const [copiedCluster, setCopiedCluster] = useState(false);
   const [autoInbox, setAutoInbox] = useState(null);
+
+  useEffect(() => {
+    if (externalOtp) {
+      setOtp(externalOtp);
+    }
+  }, [externalOtp]);
 
   // Derive most active/recent cluster
   const currentAccount = useMemo(() => {
