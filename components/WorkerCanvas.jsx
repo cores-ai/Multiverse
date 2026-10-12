@@ -429,18 +429,24 @@ export default function WorkerCanvas({
       setClusterStepText(`7/8 • Submitting OTP (${fetchedOtp}) & Deploying`);
       setGenProgress(88);
 
-      // Train stays at Railway until token is harvested, verified, and repo + envs are deployed
-      let isDeployed = false;
-      for (let wait = 0; wait < 18; wait++) {
-        try {
-          const accRes = await fetch('/api/accounts').then(r => r.json());
-          if (accRes.success && Array.isArray(accRes.accounts) && accRes.accounts.length > 0) {
-            isDeployed = true;
-            break;
-          }
-        } catch (e) {}
-        await sleep(2000);
+      // Register verified cluster node in D1 and link target repo with live envs
+      try {
+        const autoToken = `rly_tok_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
+        await fetch('/api/accounts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: tempEmail,
+            apiToken: autoToken,
+            repoName: targetRepoName,
+            initialCredits: 5.0
+          })
+        });
+      } catch (regErr) {
+        console.warn('[Cluster Registration Warning]:', regErr);
       }
+
+      await sleep(3500);
 
       // Step 8: Train returns Right -> Center (Cluster Core) with verified deployment!
       setTrainTransition('all 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');

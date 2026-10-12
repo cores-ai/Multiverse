@@ -89,6 +89,31 @@ export async function POST(request) {
             status: 'active'
         });
 
+        // Sync to Cloudflare D1 railway_accounts & link repository
+        try {
+            const { saveD1RailwayAccount } = await import('@/lib/d1');
+            await saveD1RailwayAccount({
+                account_id: newAccount.accountId,
+                email: newAccount.email,
+                api_token: apiToken,
+                status: 'ACTIVE',
+                credits_remaining: Number(initialCredits) || 5.0,
+                days_left: 30,
+                repos_count: 1,
+                max_capacity: 2
+            });
+
+            const targetRepo = repoName || 'giveaway';
+            await queryD1(
+                `UPDATE repo_deployments 
+                 SET account_id = ?, deployment_status = 'ACTIVE', live_url = ? 
+                 WHERE repo_name = ?;`,
+                [newAccount.accountId, `https://${targetRepo}.up.railway.app`, targetRepo]
+            ).catch(() => {});
+        } catch (d1Err) {
+            console.warn('[D1 Account Sync Warning]:', d1Err.message);
+        }
+
         await createLog({
             type: 'ACCOUNT_ADDED',
             message: `Railway account registered: ${newAccount.email} (${newAccount.accountId})`,
