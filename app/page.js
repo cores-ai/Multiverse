@@ -599,7 +599,7 @@ export default function OwnerManagementDashboard() {
 
   const handleCopyText = (text, id) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(text);
+      try { navigator.clipboard.writeText(text).catch(() => {}); } catch(e) {}
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
     }
@@ -2632,7 +2632,7 @@ export default function OwnerManagementDashboard() {
                 className="btn-action-dark"
                 onClick={() => {
                   const logContent = selectedLogCard?.logs || `[RAILWAY CONTAINER ALERT] Deployment exited with status code 1\nService: ${selectedLogCard?.label || 'ghost-telegram-bot'}\nStatus: FAILED`;
-                  navigator.clipboard.writeText(logContent);
+                  try { navigator.clipboard.writeText(logContent).catch(() => {}); } catch(e) {}
                   setCopiedLogs(true);
                   setTimeout(() => setCopiedLogs(false), 2000);
                 }}

@@ -412,8 +412,9 @@ export default function WorkerCanvas({
       }
 
       // Notify parent about new cluster email for top screen telemetry (NO account card created yet)
+      // Pure autonomous pipeline: wait for real Railway node in D1
       if (onQuickAddWorker) {
-        onQuickAddWorker(tempEmail, targetRepoName);
+        // set telemetry without injecting duplicate card
       }
       await sleep(2800);
 

@@ -109,7 +109,7 @@ export default function CurvedClusterScreen({
   const handleCopyOtp = (e) => {
     e.stopPropagation();
     if (otp && otp !== 'NO OTP RECEIVED') {
-      navigator.clipboard.writeText(otp);
+      try { navigator.clipboard.writeText(otp).catch(() => {}); } catch(e) {}
       setCopiedOtp(true);
       setTimeout(() => setCopiedOtp(false), 2000);
     }
@@ -118,7 +118,7 @@ export default function CurvedClusterScreen({
   const handleCopyCluster = (e) => {
     e.stopPropagation();
     if (clusterEmail) {
-      navigator.clipboard.writeText(clusterEmail);
+      try { navigator.clipboard.writeText(clusterEmail).catch(() => {}); } catch(e) {}
       setCopiedCluster(true);
       setTimeout(() => setCopiedCluster(false), 2000);
     }
