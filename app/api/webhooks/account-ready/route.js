@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createAccount, createLog, getRepositories, getRepoEnvVariables, updateRepositoryDeployment, updateAccountProjectsCount } from '@/lib/models';
-import { createRailwayProject, createRailwayService, setRailwayVariables, triggerRailwayDeploy } from '@/lib/railway';
+import { createAccount, createLog, getRepositories } from '@/lib/models';
+import { deployRepositoryToRailway } from '@/lib/railway';
+import { queryD1, saveD1RailwayAccount } from '@/lib/d1';
 
 export async function POST(request) {
     try {
@@ -17,7 +18,7 @@ export async function POST(request) {
             return NextResponse.json({ success: false, error: 'Only genuine harvested Railway API tokens are allowed. Premature cards blocked.' }, { status: 400 });
         }
 
-        // 1. Sanitize email to enforce strictly letters and numbers (no _ or .)
+        // 1. Sanitize email
         let cleanEmail = email;
         if (cleanEmail && cleanEmail.includes('@')) {
             const [u, d] = cleanEmail.split('@');
@@ -32,9 +33,8 @@ export async function POST(request) {
             status: 'active'
         });
 
-        // 3. Sync to Cloudflare D1 railway_accounts table
+        // 3. Persist to Cloudflare D1 railway_accounts table
         try {
-            const { saveD1RailwayAccount, queryD1 } = await import('@/lib/d1');
             await saveD1RailwayAccount({
                 account_id: newAccount.accountId,
                 email: newAccount.email,
@@ -45,14 +45,6 @@ export async function POST(request) {
                 repos_count: 0,
                 max_capacity: 2
             });
-
-            // Link any unassigned repo deployment in D1 to this account
-            const unassigned = await queryD1('SELECT repo_name FROM repo_deployments WHERE account_id IS NULL LIMIT 1;').catch(() => []);
-            if (unassigned && unassigned.length > 0) {
-                const targetRepo = unassigned[0].repo_name;
-                await queryD1('UPDATE repo_deployments SET account_id = ? WHERE repo_name = ?;', [newAccount.accountId, targetRepo]).catch(() => {});
-                await queryD1('UPDATE railway_accounts SET repos_count = 1 WHERE account_id = ?;', [newAccount.accountId]).catch(() => {});
-            }
         } catch (d1Err) {
             console.warn('[D1 Sync Warning in webhook]:', d1Err.message);
         }
@@ -61,107 +53,53 @@ export async function POST(request) {
             type: 'JIT_ACCOUNT_HARVESTED',
             message: `Harvested fresh Railway account via Playwright worker: ${newAccount.email}`,
             metadata: { accountId: newAccount.accountId }
-        });
+        }).catch(() => {});
 
-        // 3. Auto-Deploy Target Repo & Inject Environments via Railway GraphQL API
+        // 4. Auto-Deploy Pending / Target Repositories from D1
         let deployedRepoName = null;
         try {
-            const { queryD1 } = await import('@/lib/d1');
-            
-            // 3a. Find target unassigned repository from D1 or MongoDB
-            let targetRepoName = null;
-            let targetRepoId = null;
+            // Find repositories in D1 needing deployment (railway_project_id is NULL or not ACTIVE)
+            const pendingRepos = await queryD1(
+                "SELECT repo_name, account_id, railway_project_id, deployment_status FROM repo_deployments WHERE railway_project_id IS NULL OR deployment_status != 'ACTIVE' ORDER BY created_at ASC LIMIT 1;"
+            ).catch(() => []);
 
-            const d1Repos = await queryD1('SELECT repo_name, account_id FROM repo_deployments ORDER BY created_at DESC LIMIT 5;').catch(() => []);
-            const unassignedD1 = d1Repos.find(r => !r.account_id);
-            if (unassignedD1) {
-                targetRepoName = unassignedD1.repo_name;
-            } else if (d1Repos.length > 0) {
-                targetRepoName = d1Repos[0].repo_name;
-            }
-
-            const allRepos = await getRepositories().catch(() => []);
-            const mongoRepo = allRepos.find(r => r.deploymentStatus === 'WAITING_JIT_ACCOUNT' || !r.assignedAccountId || r.repoName === targetRepoName);
-            if (mongoRepo) {
-                targetRepoName = mongoRepo.repoName || targetRepoName;
-                targetRepoId = mongoRepo.repoId;
-            }
-
-            if (!targetRepoName) {
-                targetRepoName = 'giveaway';
-            }
-
-            // 3b. Collect all environment variables for this repo from D1 repo_envs & Mongo
-            const envMap = {};
-            const d1Envs = await queryD1('SELECT env_key, env_value FROM repo_envs WHERE repo_name = ?;', [targetRepoName]).catch(() => []);
-            if (Array.isArray(d1Envs)) {
-                d1Envs.forEach(e => {
-                    if (e.env_key) envMap[e.env_key] = e.env_value;
-                });
-            }
-
-            if (targetRepoId) {
-                const { variables: mongoEnvs } = await getRepoEnvVariables(targetRepoId).catch(() => ({ variables: {} }));
-                if (mongoEnvs) {
-                    Object.assign(envMap, mongoEnvs);
+            let targetRepo = null;
+            if (pendingRepos && pendingRepos.length > 0) {
+                targetRepo = pendingRepos[0].repo_name;
+            } else {
+                // If all are deployed, check if any repository exists
+                const anyRepo = await queryD1("SELECT repo_name FROM repo_deployments ORDER BY created_at DESC LIMIT 1;").catch(() => []);
+                if (anyRepo && anyRepo.length > 0) {
+                    targetRepo = anyRepo[0].repo_name;
                 }
             }
 
-            console.log(`🚀 [Railway Auto-Deploy] Deploying repo ${targetRepoName} with ${Object.keys(envMap).length} env variables...`);
+            if (targetRepo) {
+                console.log(`🚀 [Webhook Auto-Deploy] Provisioning repo "${targetRepo}" using newly harvested token...`);
+                const deployResult = await deployRepositoryToRailway({
+                    apiToken,
+                    repoName: targetRepo
+                });
 
-            // 3c. Create Railway Project & Service with verified token
-            const cleanProjectName = (targetRepoName || 'cluster-fleet').replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
-            const project = await createRailwayProject(newAccount.apiToken, cleanProjectName);
-            const service = await createRailwayService(newAccount.apiToken, project.projectId, cleanProjectName, targetRepoName);
+                // Link account_id to this deployment in D1
+                await queryD1(
+                    "UPDATE repo_deployments SET account_id = ? WHERE repo_name = ?;",
+                    [newAccount.accountId, targetRepo]
+                ).catch(() => {});
 
-            // 3d. Inject Environment Variables into Railway Service
-            if (Object.keys(envMap).length > 0) {
-                await setRailwayVariables(
-                    newAccount.apiToken,
-                    project.projectId,
-                    project.environmentId,
-                    service.id,
-                    envMap
-                );
-            }
+                await queryD1(
+                    "UPDATE railway_accounts SET repos_count = repos_count + 1 WHERE account_id = ?;",
+                    [newAccount.accountId]
+                ).catch(() => {});
 
-            // 3e. Trigger Railway Build & Deploy
-            await triggerRailwayDeploy(newAccount.apiToken, service.id, project.environmentId).catch(() => {});
+                deployedRepoName = targetRepo;
 
-            const liveUrl = `https://${cleanProjectName}.up.railway.app`;
-
-            // 3f. Link in Cloudflare D1
-            await queryD1(
-                `UPDATE repo_deployments 
-                 SET account_id = ?, railway_project_id = ?, railway_service_id = ?, deployment_status = 'ACTIVE', live_url = ? 
-                 WHERE repo_name = ?;`,
-                [newAccount.accountId, project.projectId, service.id, liveUrl, targetRepoName]
-            ).catch(() => {});
-
-            await queryD1(
-                `UPDATE railway_accounts SET repos_count = repos_count + 1 WHERE account_id = ?;`,
-                [newAccount.accountId]
-            ).catch(() => {});
-
-            if (targetRepoId) {
-                await updateRepositoryDeployment(targetRepoId, {
-                    assignedAccountId: newAccount.accountId,
-                    railwayProjectId: project.projectId,
-                    railwayServiceId: service.id,
-                    deploymentStatus: 'ACTIVE',
-                    liveUrl
+                await createLog({
+                    type: 'JIT_AUTO_DEPLOYED',
+                    message: `Successfully auto-deployed ${targetRepo} onto Railway (${newAccount.accountId}) with ${deployResult.injectedEnvCount} envs`,
+                    metadata: { repoName: targetRepo, accountId: newAccount.accountId, liveUrl: deployResult.liveUrl }
                 }).catch(() => {});
-                await updateAccountProjectsCount(newAccount.accountId, 1).catch(() => {});
             }
-
-            deployedRepoName = targetRepoName;
-
-            await createLog({
-                type: 'JIT_AUTO_DEPLOYED',
-                message: `Successfully deployed repo ${targetRepoName} with ${Object.keys(envMap).length} envs onto Railway (${newAccount.accountId})`,
-                metadata: { repoName: targetRepoName, accountId: newAccount.accountId, liveUrl }
-            }).catch(() => {});
-
         } catch (deployErr) {
             console.error('❌ [Railway Auto-Deploy Notice]:', deployErr.message);
         }
