@@ -154,9 +154,11 @@ export default function CurvedClusterScreen({
         {/* LEFT COLUMN: new cluster & cluster otp */}
         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '3px' }}>
           
-          {/* Row 1: new cluster: */}
+          {/* Row 1: cluster identifier */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontFamily: 'var(--font-mono, monospace)', lineHeight: 1.2 }}>
-            <span style={{ color: '#94A3B8', fontWeight: 600, letterSpacing: '0.02em' }}>new cluster:</span>
+            <span style={{ color: '#94A3B8', fontWeight: 600, letterSpacing: '0.02em' }}>
+              {latestCluster && latestCluster.status === 'INITIALIZING...' ? 'new cluster:' : 'cluster:'}
+            </span>
             <span style={{ color: '#00F0FF', fontWeight: 700, letterSpacing: '0.03em' }}>{clusterEmail || 'AWAITING CLUSTER INITIATION'}</span>
             <button
               onClick={handleCopyCluster}
@@ -194,6 +196,21 @@ export default function CurvedClusterScreen({
                 }}
               >
                 {otp}
+              </span>
+            ) : currentAccount && (currentAccount.status === 'active' || currentAccount.status === 'ACTIVE' || (accounts || []).some(a => a.email === clusterEmail)) ? (
+              <span 
+                style={{ 
+                  color: '#10B981', 
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                  fontWeight: 800,
+                  letterSpacing: '0.08em',
+                  boxShadow: '0 0 10px rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                VERIFIED
               </span>
             ) : (
               <span 

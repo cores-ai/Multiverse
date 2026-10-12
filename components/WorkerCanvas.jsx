@@ -86,17 +86,38 @@ export default function WorkerCanvas({
     }
   }, [pipelineVal]);
 
-  // Auto-detect non-clustered repo: If repos exist but no cluster accounts exist yet
+  // Auto-detect non-clustered repo: Only trigger if genuine unclustered repo exists and no capacity
   useEffect(() => {
-    if (repos && repos.length > 0 && (!accounts || accounts.length === 0)) {
-      const firstRepo = repos[0]?.repoName || repos[0]?.repoId;
-      if (firstRepo && !autoTriggeredReposRef.current.has(firstRepo) && !isGenerating) {
-        autoTriggeredReposRef.current.add(firstRepo);
-        const timer = setTimeout(() => {
-          handleGenerateCluster(firstRepo);
-        }, 1200);
-        return () => clearTimeout(timer);
-      }
+    if (!repos || repos.length === 0) return;
+
+    // Check if there are genuinely unassigned repositories that have no active deployment
+    const unassignedRepos = repos.filter(r => 
+      !r.assignedAccountId && 
+      r.deploymentStatus !== 'ACTIVE' && 
+      r.deploymentStatus !== 'DEPLOYED' &&
+      !(accounts || []).some(a => a.accountId === r.assignedAccountId || a.repoName === r.repoName || a.email === r.repoName)
+    );
+
+    // If all repositories are already assigned or deployed, DO NOT auto-generate a new cluster!
+    if (unassignedRepos.length === 0) {
+      return;
+    }
+
+    // Also check if any existing account has free capacity to take the unassigned repo
+    const hasCapacity = (accounts || []).some(a => (a.activeProjectsCount || 0) < (a.maxCapacity || 2));
+    if (hasCapacity) {
+      // An existing account already has available slots, no need to create a new Railway account!
+      return;
+    }
+
+    // Only if unassigned repo exists AND all existing accounts are full (or zero accounts exist):
+    const targetRepo = unassignedRepos[0]?.repoName || unassignedRepos[0]?.repoId;
+    if (targetRepo && !autoTriggeredReposRef.current.has(targetRepo) && !isGenerating) {
+      autoTriggeredReposRef.current.add(targetRepo);
+      const timer = setTimeout(() => {
+        handleGenerateCluster(targetRepo);
+      }, 2000);
+      return () => clearTimeout(timer);
     }
   }, [repos, accounts, isGenerating]);
 
@@ -110,8 +131,13 @@ export default function WorkerCanvas({
     const prev = prevCountRef.current;
     const curAccs = (accounts || []).length;
     const curRepos = (repos || []).length;
+    
+    // Only trigger if a NEW repo was added that is NOT already assigned/deployed
     if (curRepos > prev.repos && !isGenerating) {
-      handleGenerateCluster();
+      const unassigned = (repos || []).find(r => !r.assignedAccountId && r.deploymentStatus !== 'ACTIVE');
+      if (unassigned) {
+        handleGenerateCluster(unassigned.repoName || unassigned.repoId);
+      }
     } else if (curAccs > prev.accs) {
       setTrainTransition('transform 2.6s cubic-bezier(0.25, 0.1, 0.25, 1)');
       dispatchTrain('right', 'transform 2.6s cubic-bezier(0.25, 0.1, 0.25, 1)');
@@ -323,11 +349,25 @@ export default function WorkerCanvas({
   // Full Multi-Stage Train Transit Pipeline for Cluster Generation & Deployment
   const handleGenerateCluster = async (repoIdentifier = null) => {
     if (isGenerating) return;
+
+    const targetRepoName = repoIdentifier || repos[0]?.repoName || repos[0]?.repoId || 'giveaway';
+
+    // Comprehensive Guard: If this repo is already deployed or assigned to an active account, do NOT recreate!
+    const isAlreadyAssigned = (repos || []).some(r => 
+      (r.repoName === targetRepoName || r.repoId === targetRepoName) && 
+      (r.assignedAccountId || r.deploymentStatus === 'ACTIVE')
+    );
+    const existingActiveAccounts = (accounts || []).filter(a => a.status === 'active' || a.status === 'ACTIVE');
+
+    if (isAlreadyAssigned && existingActiveAccounts.length > 0) {
+      console.log(`[Autonomous Guard] Repository "${targetRepoName}" is already deployed on active account. Skipping new cluster generation.`);
+      return;
+    }
+
     setIsGenerating(true);
     setGenProgress(5);
 
     const sleep = (ms) => new Promise(res => setTimeout(res, ms));
-    const targetRepoName = repoIdentifier || repos[0]?.repoName || repos[0]?.repoId || 'giveaway';
 
     try {
       // Step 1: Train departs Center -> Left (GitHub Portal) to inspect repository
