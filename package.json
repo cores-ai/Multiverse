@@ -8,7 +8,8 @@
     "start": "next start",
     "bot": "node telegram_bot.js",
     "worker": "node account_worker.js",
-    "delete": "node delete_worker.js"
+    "delete": "node delete_worker.js",
+    "daemon": "node auto_railway_daemon.js"
   },
   "dependencies": {
     "@octokit/rest": "^22.0.1",

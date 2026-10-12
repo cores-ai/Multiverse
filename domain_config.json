@@ -1,7 +1,8 @@
 {
   "domains": [
-    "mailu.site"
+    "iq4u8.shop",
+    "resumi.shop"
   ],
-  "defaultDomain": "mailu.site",
+  "defaultDomain": null,
   "authorizedUsers": []
 }
