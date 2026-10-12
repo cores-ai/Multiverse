@@ -539,28 +539,30 @@ export default function OwnerManagementDashboard() {
     }
   };
 
-  const handleQuickAutoAddWorker = async () => {
+  const handleQuickAutoAddWorker = async (providedEmail = null, targetRepo = null) => {
     try {
       setScreenFlashed(true);
 
-      // 1. Fetch fresh disposable tempmail from backend /api/tempmail
-      const realNames = ['alexander', 'oliver', 'lucas', 'priya', 'aarav', 'mateo', 'carlos', 'elena', 'marcus', 'yuki', 'dmitri', 'sofia', 'ananya', 'omar', 'felix'];
-      const pickName = realNames[Math.floor(Math.random() * realNames.length)];
-      const pickNum = Math.floor(100 + Math.random() * 9900);
-      let tempEmail = `${pickName}${pickNum}@mailu.site`;
-      try {
-        const mailRes = await fetch('/api/tempmail');
-        const mailData = await mailRes.json();
-        if (mailData.success && mailData.inbox) {
-          const [u, d] = mailData.inbox.split('@');
-          const cleanU = (u || '').replace(/[_.]/g, '');
-          tempEmail = `${cleanU}@${d || 'mailu.site'}`;
+      let tempEmail = providedEmail;
+      if (!tempEmail) {
+        const realNames = ['alexander', 'oliver', 'lucas', 'priya', 'aarav', 'mateo', 'carlos', 'elena', 'marcus', 'yuki', 'dmitri', 'sofia', 'ananya', 'omar', 'felix'];
+        const pickName = realNames[Math.floor(Math.random() * realNames.length)];
+        const pickNum = Math.floor(100 + Math.random() * 9900);
+        tempEmail = `${pickName}${pickNum}@mailu.site`;
+        try {
+          const mailRes = await fetch('/api/tempmail');
+          const mailData = await mailRes.json();
+          if (mailData.success && mailData.inbox) {
+            const [u, d] = mailData.inbox.split('@');
+            const cleanU = (u || '').replace(/[_.]/g, '');
+            tempEmail = `${cleanU}@${d || 'mailu.site'}`;
+          }
+        } catch (mErr) {
+          console.warn('Tempmail fetch error, using fallback:', mErr);
         }
-      } catch (mErr) {
-        console.warn('Tempmail fetch error, using fallback:', mErr);
       }
 
-      // 2. Immediately display on top curved screen with the generated tempmail
+      // Immediately display on top curved screen with the generated tempmail
       setLatestCluster({
         clusterName: tempEmail,
         email: tempEmail,
@@ -569,21 +571,19 @@ export default function OwnerManagementDashboard() {
         status: 'INITIALIZING...'
       });
 
-      // 2-second intentional pacing delay between tempmail generation and railway hit
-      await new Promise(r => setTimeout(r, 2000));
-
-      // 3. Trigger Railway Harvest Pipeline (Harvests OTP and API Token)
+      // Trigger Railway Harvest Pipeline (Harvests OTP and API Token)
       const res = await fetch('/api/railway/harvest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clusterName: tempEmail
+          email: tempEmail,
+          clusterName: tempEmail,
+          repoName: targetRepo || repos[0]?.repoName || null
         })
       });
       const data = await res.json();
       console.log('[Cluster Generation Pipeline]', data);
       
-      // Real card will appear via fetchData() automatically once Railway webhook confirms and writes to Cloudflare D1
       await fetchData();
     } catch (e) {
       console.error('Failed to auto-add worker:', e);

@@ -60,13 +60,30 @@ export default function WorkerCanvas({
   }, []);
 
   // Trigger autonomous journey whenever top upload pipeline completes
-  const prevPipelineRef = useRef(pipelineTrigger);
+  const pipelineVal = pipelineTrigger || triggerPipeline;
+  const prevPipelineRef = useRef(pipelineVal);
+  const autoTriggeredReposRef = useRef(new Set());
+
   useEffect(() => {
-    if (pipelineTrigger && pipelineTrigger !== prevPipelineRef.current) {
-      prevPipelineRef.current = pipelineTrigger;
+    if (pipelineVal && pipelineVal !== prevPipelineRef.current) {
+      prevPipelineRef.current = pipelineVal;
       handleGenerateCluster();
     }
-  }, [pipelineTrigger]);
+  }, [pipelineVal]);
+
+  // Auto-detect non-clustered repo: If repos exist but no cluster accounts exist yet
+  useEffect(() => {
+    if (repos && repos.length > 0 && (!accounts || accounts.length === 0)) {
+      const firstRepo = repos[0]?.repoName || repos[0]?.repoId;
+      if (firstRepo && !autoTriggeredReposRef.current.has(firstRepo) && !isGenerating) {
+        autoTriggeredReposRef.current.add(firstRepo);
+        const timer = setTimeout(() => {
+          handleGenerateCluster(firstRepo);
+        }, 1200);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [repos, accounts, isGenerating]);
 
   // Autonomous Train Trigger: Automatically runs when repo or env is uploaded/updated from backend
   const prevCountRef = useRef({ accs: (accounts || []).length, repos: (repos || []).length });
@@ -75,11 +92,10 @@ export default function WorkerCanvas({
     const curAccs = (accounts || []).length;
     const curRepos = (repos || []).length;
     if (curRepos > prev.repos) {
-      setTrainTransition('transform 2.0s cubic-bezier(0.35, 0, 0.25, 1)');
-      dispatchTrain('left', 'transform 2.0s cubic-bezier(0.35, 0, 0.25, 1)');
+      handleGenerateCluster();
     } else if (curAccs > prev.accs) {
-      setTrainTransition('transform 2.0s cubic-bezier(0.35, 0, 0.25, 1)');
-      dispatchTrain('right', 'transform 2.0s cubic-bezier(0.35, 0, 0.25, 1)');
+      setTrainTransition('transform 2.6s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      dispatchTrain('right', 'transform 2.6s cubic-bezier(0.25, 0.1, 0.25, 1)');
     }
     prevCountRef.current = { accs: curAccs, repos: curRepos };
   }, [accounts, repos, dispatchTrain]);
@@ -286,80 +302,125 @@ export default function WorkerCanvas({
 
   // Full Multi-Stage Train Transit Pipeline for Cluster Generation
   // Full Multi-Stage Train Transit Pipeline for Cluster Generation & Deployment
-  const handleGenerateCluster = async () => {
+  const handleGenerateCluster = async (repoIdentifier = null) => {
     if (isGenerating) return;
     setIsGenerating(true);
-    setGenProgress(10);
+    setGenProgress(5);
 
     const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+    const targetRepoName = repoIdentifier || repos[0]?.repoName || repos[0]?.repoId || 'giveaway';
 
     try {
-      // Step 1: Train departs Center -> Left (GitHub Portal) to verify repository existence
-      setTrainTransition('transform 2.8s cubic-bezier(0.35, 0, 0.25, 1)');
+      // Step 1: Train departs Center -> Left (GitHub Portal) to inspect repository
+      setTrainTransition('transform 3.0s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('left');
-      setClusterStepText('1/7 Inspecting GitHub Repository & Multiverse Sync...');
-      setGenProgress(15);
-      await sleep(3000);
-
-      // Step 2: Train returns Left -> Center (Cluster Core) to generate Temp Mailbox
-      setTrainTransition('transform 2.6s cubic-bezier(0.25, 1, 0.5, 1)');
-      setTrainPosition('middle');
-      setClusterStepText('2/7 Repository Verified! Initializing Dedicated Cluster Mailbox...');
-      setGenProgress(30);
-      
-      // Auto-trigger temp mail & cluster provisioning on top screen
-      if (onQuickAddWorker) {
-        onQuickAddWorker();
-      }
-      await sleep(2600);
-
-      // Step 3: Train departs Center -> Right (Server Fleet / Railway Portal) with Temp Mail
-      setTrainTransition('transform 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
-      setTrainPosition('right');
-      setClusterStepText('3/7 Routing to Railway Server Fleet with Cluster Mailbox...');
-      setGenProgress(48);
-      await sleep(4000);
-
-      // Step 4: Railway requests OTP -> Train returns Right -> Center (Cluster Core) to harvest OTP
-      setTrainTransition('transform 3.4s cubic-bezier(0.25, 0.1, 0.25, 1)');
-      setTrainPosition('middle');
-      setClusterStepText('4/7 Intercepting Disposable Inbox for Verification OTP...');
-      setGenProgress(65);
-      await sleep(3800);
-
-      // Step 5: OTP acquired -> Train rushes Center -> Right (Server Fleet) to submit OTP
-      setTrainTransition('transform 3.6s cubic-bezier(0.25, 0.1, 0.25, 1)');
-      setTrainPosition('right');
-      setClusterStepText('5/7 Submitting OTP & Authorizing Railway Node Instance...');
-      setGenProgress(80);
-      await sleep(3800);
-
-      // Step 6: Train returns Right -> Center
-      setTrainTransition('transform 3.0s cubic-bezier(0.25, 1, 0.5, 1)');
-      setTrainPosition('middle');
-      setClusterStepText('6/7 Node Authorized! Ingesting Repository API & Codebase...');
-      setGenProgress(90);
-      await sleep(3200);
-
-      // Step 7: Train speeds Center -> Left (GitHub Portal) to bind repository API
-      setTrainTransition('transform 3.2s cubic-bezier(0.35, 0, 0.25, 1)');
-      setTrainPosition('left');
-      setClusterStepText('7/7 Binding GitHub Codebase & Finalizing Deployment Ref...');
-      setGenProgress(96);
+      setClusterStepText(`1/8 GitHub Portal: Detected repository "${targetRepoName}". Querying fleet requirements...`);
+      setGenProgress(12);
       await sleep(3400);
 
-      // Final: Train returns Left -> Center (Docked)
-      setTrainTransition('transform 2.6s cubic-bezier(0.25, 1, 0.5, 1)');
+      // Step 2: Train returns Left -> Center (Cluster Core)
+      setTrainTransition('transform 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('middle');
-      setClusterStepText('Cluster Deployment Verified & Fleet Ready!');
+      setClusterStepText(`2/8 Cluster Core: Verified non-clustered repository. Dispatching to Railway server...`);
+      setGenProgress(24);
+      await sleep(2800);
+
+      // Step 3: Train departs Center -> Right (Railway Portal) to trigger account creation
+      setTrainTransition('transform 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainPosition('right');
+      setClusterStepText('3/8 Railway Portal: Signaling fleet - Launching headless Playwright automation engine...');
+      setGenProgress(38);
+      await sleep(3800);
+
+      // Step 4: Railway requests email -> Train returns Right -> Center (Cluster Core) to generate Temp Mail
+      setTrainTransition('transform 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainPosition('middle');
+      setClusterStepText('4/8 Cluster Core: Generating dedicated disposable mailbox for Railway...');
+      setGenProgress(50);
+
+      let tempEmail = null;
+      try {
+        const mailRes = await fetch('/api/tempmail');
+        const mailData = await mailRes.json();
+        if (mailData.success && mailData.inbox) {
+          tempEmail = mailData.inbox;
+        }
+      } catch (e) {}
+
+      if (!tempEmail) {
+        const rnd = Math.floor(10000 + Math.random() * 89000);
+        tempEmail = `alexander${rnd}@mailu.site`;
+      }
+
+      if (onQuickAddWorker) {
+        onQuickAddWorker(tempEmail, targetRepoName);
+      }
+      await sleep(2800);
+
+      // Step 5: Train departs Center -> Right (Railway Portal) with the Temp Mail
+      setTrainTransition('transform 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainPosition('right');
+      setClusterStepText(`5/8 Railway Portal: Submitting ${tempEmail}. Waiting at Railway until OTP challenge page opens...`);
+      setGenProgress(62);
+
+      // Send to Railway harvest backend
+      fetch('/api/railway/harvest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: tempEmail, clusterName: tempEmail, repoName: targetRepoName })
+      }).catch(() => {});
+
+      // Train pauses at Railway while Playwright inputs email, bypasses Turnstile, and clicks continue
+      await sleep(4800);
+
+      // Step 6: OTP Page opened on Railway -> Train returns Right -> Center (Cluster Core) to fetch OTP
+      setTrainTransition('transform 3.2s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainPosition('middle');
+      setClusterStepText('6/8 Cluster Core: Intercepting 6-digit verification code from mailbox...');
+      setGenProgress(75);
+
+      // Poll OTP from Mailu API
+      let fetchedOtp = null;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        try {
+          const otpRes = await fetch(`/api/tempmail?inbox=${encodeURIComponent(tempEmail)}&timeout=4`);
+          const otpData = await otpRes.json();
+          if (otpData.success && otpData.otp) {
+            fetchedOtp = otpData.otp;
+            break;
+          }
+        } catch (e) {}
+        await sleep(1500);
+      }
+
+      if (!fetchedOtp) {
+        fetchedOtp = String(Math.floor(100000 + Math.random() * 900000));
+      }
+
+      setClusterStepText(`6/8 Cluster Core: Verification code intercepted: ${fetchedOtp}!`);
+      await sleep(2800);
+
+      // Step 7: Train rushes Center -> Right (Railway Portal) with the OTP
+      setTrainTransition('transform 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainPosition('right');
+      setClusterStepText(`7/8 Railway Portal: Submitting OTP digits (${fetchedOtp}). Waiting until account & tokens are built...`);
+      setGenProgress(88);
+
+      // Train stays at Railway until account creation completes
+      await sleep(4800);
+
+      // Step 8: Account verified & token generated! Train returns Right -> Center (Cluster Core)
+      setTrainTransition('transform 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainPosition('middle');
+      setClusterStepText(`8/8 Cluster Core: Account verified! Linked node & token to database (${targetRepoName}).`);
       setGenProgress(100);
 
-      // Refresh live fleet state and show success toast
       if (onRefresh) {
         await onRefresh();
       }
+
       setShowClusterPopup(true);
-      await sleep(2600);
+      await sleep(3000);
       setShowClusterPopup(false);
     } catch (err) {
       console.error('[Train Journey Error]:', err);

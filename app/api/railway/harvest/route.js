@@ -6,6 +6,8 @@ import path from 'path';
 
 import fs from 'fs';
 
+import { saveD1RailwayAccount, queryD1 } from '@/lib/d1';
+
 /**
  * POST /api/railway/harvest
  * Triggers the Railway Playwright account harvesting script
@@ -15,13 +17,17 @@ export async function POST(request) {
     try {
         const body = await request.json().catch(() => ({}));
         const clusterName = body.clusterName || 'railway-worker-engine';
+        const targetRepoName = body.repoName || null;
 
-        // 1. Generate unique disposable email via Mailu.site (strictly international name + numbers, no underscores, no dots)
-        const newMail = generateTempEmail();
-        const [u, d] = newMail.inbox.split('@');
-        const tempEmail = `${(u || '').replace(/[_.]/g, '')}@${d || 'mailu.site'}`;
+        // 1. Resolve email: re-use existing provided email or generate a fresh clean disposable email
+        let tempEmail = body.email || (body.clusterName && body.clusterName.includes('@') ? body.clusterName : null);
+        if (!tempEmail) {
+            const newMail = generateTempEmail();
+            const [u, d] = newMail.inbox.split('@');
+            tempEmail = `${(u || '').replace(/[_.]/g, '')}@${d || 'mailu.site'}`;
+        }
 
-        // 2. Provision new Railway account in database
+        // 2. Provision new Railway account in database (both MongoDB and Cloudflare D1)
         const apiToken = `rly_tok_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
         const account = await createAccount({
             email: tempEmail,
@@ -30,6 +36,27 @@ export async function POST(request) {
             initialCredits: 5.0,
             status: 'active'
         });
+
+        // Sync directly to Cloudflare D1 railway_accounts
+        try {
+            await saveD1RailwayAccount({
+                account_id: account.accountId,
+                email: tempEmail,
+                api_token: apiToken,
+                status: 'ACTIVE',
+                credits_remaining: 5.0,
+                days_left: 30,
+                repos_count: targetRepoName ? 1 : 0,
+                max_capacity: 2
+            });
+
+            // If a repo was provided or exists unassigned, link it in D1
+            if (targetRepoName) {
+                await queryD1('UPDATE repo_deployments SET account_id = ? WHERE repo_name = ?;', [account.accountId, targetRepoName]).catch(() => {});
+            }
+        } catch (d1Err) {
+            console.warn('[D1 Sync Warning in harvest]:', d1Err.message);
+        }
 
         await createLog({
             type: 'RAILWAY_SCRIPT_TRIGGERED',
