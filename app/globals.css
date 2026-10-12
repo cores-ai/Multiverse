@@ -58,41 +58,46 @@ button { font-family: inherit; }
   color: var(--text-primary);
 }
 
-/* Fixed Left Sidebar */
+/* Slide-Out Drawer Left Sidebar (Zero Layout Shift) */
 .app-sidebar {
   width: 260px;
-  min-width: 260px;
   height: 100vh;
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
   background-color: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   padding: 22px 16px 42px;
-  z-index: 50;
-  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.4);
-  transition: width 0.28s cubic-bezier(0.25, 0.1, 0.25, 1),
-              min-width 0.28s cubic-bezier(0.25, 0.1, 0.25, 1),
-              margin-left 0.28s cubic-bezier(0.25, 0.1, 0.25, 1),
-              padding 0.28s cubic-bezier(0.25, 0.1, 0.25, 1),
-              opacity 0.2s ease,
-              visibility 0.28s ease;
+  z-index: 100;
+  box-shadow: 10px 0 35px rgba(0, 0, 0, 0.7);
+  transform: translateX(0);
+  transition: transform 0.28s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-/* Collapsed State (Default Closed) */
+/* Collapsed Drawer (Slid Completely Off-Screen To Left, No Layout Impact) */
 .app-sidebar.is-collapsed {
-  width: 0 !important;
-  min-width: 0 !important;
-  max-width: 0 !important;
-  margin-left: -260px !important;
-  padding: 0 !important;
-  border-right: none !important;
-  overflow: hidden !important;
-  opacity: 0 !important;
-  visibility: hidden !important;
+  transform: translateX(-100%) !important;
   pointer-events: none !important;
+  box-shadow: none !important;
+}
+
+/* Dim Backdrop Overlay when Drawer is Open */
+.sidebar-backdrop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 90;
+  animation: fadeInBackdrop 0.2s ease forwards;
+}
+
+@keyframes fadeInBackdrop {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .sidebar-header {

@@ -1133,30 +1133,29 @@ export default function OwnerManagementDashboard() {
       <main className="app-main">
         {/* Sticky Top Header */}
         <header className="main-top-header">
-          <div className="header-breadcrumbs" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {!isSidebarOpen && (
-              <button
-                onClick={() => setIsSidebarOpen(true)}
-                className="transparent-hamburger-btn"
-                title="Open Navigation"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  boxShadow: 'none',
-                  color: '#00F0FF',
-                  cursor: 'pointer',
-                  padding: '2px',
-                  marginRight: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'opacity 0.2s ease'
-                }}
-              >
-                <Menu size={16} />
-              </button>
-            )}
+          <div className="header-breadcrumbs" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={() => setIsSidebarOpen(prev => !prev)}
+              className="transparent-hamburger-btn"
+              title="Toggle Navigation Menu"
+              style={{
+                background: isSidebarOpen ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(0, 240, 255, 0.35)',
+                outline: 'none',
+                boxShadow: '0 0 10px rgba(0, 240, 255, 0.15)',
+                color: '#00F0FF',
+                cursor: 'pointer',
+                padding: '6px 8px',
+                marginRight: '6px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <Menu size={16} />
+            </button>
             <span>iq4u8- server</span>
             <ChevronRight size={13} />
             <span>{getBreadcrumbSection()}</span>
