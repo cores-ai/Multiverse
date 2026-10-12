@@ -43,6 +43,8 @@ export async function POST(request) {
             
             const desktopBase = process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'Desktop') : 'C:\\Users\\iq4u8\\Desktop';
             const candidatePaths = [
+                path.join(process.cwd(), 'account_worker.js'),
+                path.join(desktopBase, 'Multiverse', 'account_worker.js'),
                 path.join(desktopBase, 'Rilway Server', 'account_worker.js'),
                 path.join(desktopBase, 'megaserver', 'Rilway Server', 'account_worker.js'),
                 path.resolve(process.cwd(), '..', 'Rilway Server', 'account_worker.js')
