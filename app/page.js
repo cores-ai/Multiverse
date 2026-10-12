@@ -539,16 +539,25 @@ export default function OwnerManagementDashboard() {
     }
   };
 
-  const handleDeleteAccount = async (id, email = null) => {
+    const handleDeleteAccount = async (id, email = null) => {
     try {
-      setAccounts(prev => prev.filter(a => a.accountId !== id && a._id !== id && a.email !== id));
-      const q = email ? `accountId=${encodeURIComponent(id)}&email=${encodeURIComponent(email)}` : `accountId=${encodeURIComponent(id)}`;
-      await fetch(`/api/accounts?${q}`, { method: 'DELETE' }).catch(() => {});
+      const targetEmail = (email && email.includes('@')) ? email : (typeof id === 'string' && id.includes('@') ? id : null);
+      console.log(`🗑️ Initiating permanent Railway account deletion for: ${targetEmail || id}...`);
+      setAccounts(prev => prev.filter(a => a.accountId !== id && a._id !== id && a.email !== (targetEmail || id)));
+      
+      const res = await fetch('/api/railway/delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: id, email: targetEmail || id })
+      });
+      const data = await res.json();
+      console.log('Delete result:', data);
       setTimeout(() => {
         fetchData();
-      }, 400);
+      }, 500);
     } catch (e) {
       console.error('Failed to delete account:', e);
+      fetchData();
     }
   };
 

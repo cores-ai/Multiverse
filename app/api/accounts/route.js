@@ -8,11 +8,12 @@ import { getD1RailwayAccounts, queryD1 } from '@/lib/d1';
 export async function GET() {
     try {
         let accounts = [];
-        
+        let d1Loaded = false;
         // 1. Try fetching from Cloudflare D1 remote database
         try {
             const d1Accs = await getD1RailwayAccounts();
-            if (Array.isArray(d1Accs) && d1Accs.length > 0) {
+            if (Array.isArray(d1Accs)) {
+                d1Loaded = true;
                 accounts = d1Accs.map(a => ({
                     _id: a.account_id,
                     accountId: a.account_id,
@@ -31,8 +32,8 @@ export async function GET() {
             console.warn('[D1 Accounts Fetch Notice]:', d1Err.message);
         }
 
-        // 2. Fallback to MongoDB / memory if D1 had no accounts
-        if (accounts.length === 0) {
+        // 2. Only fallback to MongoDB / memory if D1 connection threw an error
+        if (!d1Loaded) {
             const dbAccs = await getAccounts();
             accounts = dbAccs || [];
         }
@@ -89,31 +90,6 @@ export async function POST(request) {
             status: 'active'
         });
 
-        // Sync to Cloudflare D1 railway_accounts & link repository
-        try {
-            const { saveD1RailwayAccount } = await import('@/lib/d1');
-            await saveD1RailwayAccount({
-                account_id: newAccount.accountId,
-                email: newAccount.email,
-                api_token: apiToken,
-                status: 'ACTIVE',
-                credits_remaining: Number(initialCredits) || 5.0,
-                days_left: 30,
-                repos_count: 1,
-                max_capacity: 2
-            });
-
-            const targetRepo = repoName || 'giveaway';
-            await queryD1(
-                `UPDATE repo_deployments 
-                 SET account_id = ?, deployment_status = 'ACTIVE', live_url = ? 
-                 WHERE repo_name = ?;`,
-                [newAccount.accountId, `https://${targetRepo}.up.railway.app`, targetRepo]
-            ).catch(() => {});
-        } catch (d1Err) {
-            console.warn('[D1 Account Sync Warning]:', d1Err.message);
-        }
-
         await createLog({
             type: 'ACCOUNT_ADDED',
             message: `Railway account registered: ${newAccount.email} (${newAccount.accountId})`,
@@ -151,28 +127,21 @@ export async function DELETE(request) {
     try {
         const { searchParams } = new URL(request.url);
         const accountId = searchParams.get('accountId');
+        const email = searchParams.get('email');
 
-        if (!accountId) {
-            return NextResponse.json({ success: false, error: 'accountId is required' }, { status: 400 });
+        if (!accountId && !email) {
+            return NextResponse.json({ success: false, error: 'accountId or email is required' }, { status: 400 });
         }
 
-        await deleteAccount(accountId);
-
-        // Delete from Cloudflare D1
-        try {
-            await queryD1('UPDATE repo_deployments SET account_id = NULL WHERE account_id = ?;', [accountId]).catch(() => {});
-            await queryD1('DELETE FROM railway_accounts WHERE account_id = ? OR email = ?;', [accountId, accountId]).catch(() => {});
-        } catch (d1Err) {
-            console.warn('[D1 Account Delete Notice]:', d1Err.message);
-        }
-
-        await createLog({
-            type: 'ACCOUNT_DELETED',
-            message: `Cluster removed: ${accountId}`,
-            metadata: { accountId }
+        // Delegate to autonomous delete-account route logic to ensure real Railway deletion
+        const baseUrl = process.env.MIDDLEMAN_WEBHOOK_URL ? new URL(process.env.MIDDLEMAN_WEBHOOK_URL).origin : 'http://localhost:3000';
+        const res = await fetch(`${baseUrl}/api/railway/delete-account`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accountId, email })
         });
-
-        return NextResponse.json({ success: true, deleted: accountId });
+        const data = await res.json();
+        return NextResponse.json(data);
     } catch (e) {
         console.error('DELETE /api/accounts error:', e.message);
         return NextResponse.json({ success: false, error: e.message }, { status: 500 });

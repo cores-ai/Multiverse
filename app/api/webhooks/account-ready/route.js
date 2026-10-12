@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createAccount, createLog, getRepositories } from '@/lib/models';
-import { deployRepositoryToRailway } from '@/lib/railway';
-import { queryD1, saveD1RailwayAccount } from '@/lib/d1';
+import { createAccount, createLog, getRepositories, getRepoEnvVariables, updateRepositoryDeployment, updateAccountProjectsCount } from '@/lib/models';
+import { createRailwayProject, createRailwayService, setRailwayVariables, triggerRailwayDeploy } from '@/lib/railway';
 
 export async function POST(request) {
     try {
@@ -18,7 +17,10 @@ export async function POST(request) {
             return NextResponse.json({ success: false, error: 'Only genuine harvested Railway API tokens are allowed. Premature cards blocked.' }, { status: 400 });
         }
 
-        // 1. Sanitize email
+        // Clear active harvester lock upon successful harvest
+        global._activeHarvester = null;
+
+        // 1. Sanitize email to enforce strictly letters and numbers (no _ or .)
         let cleanEmail = email;
         if (cleanEmail && cleanEmail.includes('@')) {
             const [u, d] = cleanEmail.split('@');
@@ -33,8 +35,9 @@ export async function POST(request) {
             status: 'active'
         });
 
-        // 3. Persist to Cloudflare D1 railway_accounts table
+        // 3. Sync to Cloudflare D1 railway_accounts table
         try {
+            const { saveD1RailwayAccount, queryD1 } = await import('@/lib/d1');
             await saveD1RailwayAccount({
                 account_id: newAccount.accountId,
                 email: newAccount.email,
@@ -45,70 +48,88 @@ export async function POST(request) {
                 repos_count: 0,
                 max_capacity: 2
             });
+
+            // Auto-deploy target repo (giveaway or pending) to this fresh Railway account
+            let targetRepo = 'giveaway';
+            const pending = await queryD1('SELECT repo_name FROM repo_deployments ORDER BY created_at ASC LIMIT 1;').catch(() => []);
+            if (pending && pending[0]?.repo_name) {
+                targetRepo = pending[0].repo_name;
+            }
+
+            console.log(`🚀 [Auto-Deploy] Launching automated Railway fleet deployment for: ${targetRepo}...`);
+            const { deployRepositoryToRailway } = await import('@/lib/railway');
+            const deployResult = await deployRepositoryToRailway({
+                apiToken,
+                repoName: targetRepo,
+                githubOrg: 'Coras-Multiverse',
+                accountId: newAccount.accountId
+            });
+
+            console.log(`✅ [Auto-Deploy] Deployment completed successfully! Live URL: ${deployResult.liveUrl}`);
+
+            await createLog({
+                type: 'AUTO_DEPLOY_COMPLETE',
+                message: `Auto-deployed repo '${targetRepo}' on new account ${cleanEmail} with full ENV injection. Live: ${deployResult.liveUrl}`,
+                metadata: { repo: targetRepo, projectId: deployResult.projectId, serviceId: deployResult.serviceId, liveUrl: deployResult.liveUrl }
+            });
         } catch (d1Err) {
-            console.warn('[D1 Sync Warning in webhook]:', d1Err.message);
+            console.warn('[D1 Sync / Auto-Deploy Warning in webhook]:', d1Err.message);
         }
 
         await createLog({
             type: 'JIT_ACCOUNT_HARVESTED',
             message: `Harvested fresh Railway account via Playwright worker: ${newAccount.email}`,
             metadata: { accountId: newAccount.accountId }
-        }).catch(() => {});
+        });
 
-        // 4. Auto-Deploy Pending / Target Repositories from D1
-        let deployedRepoName = null;
-        try {
-            // Find repositories in D1 needing deployment (railway_project_id is NULL or not ACTIVE)
-            const pendingRepos = await queryD1(
-                "SELECT repo_name, account_id, railway_project_id, deployment_status FROM repo_deployments WHERE railway_project_id IS NULL OR deployment_status != 'ACTIVE' ORDER BY created_at ASC LIMIT 1;"
-            ).catch(() => []);
+        // 2. Check for any pending repos waiting for a JIT account
+        const allRepos = await getRepositories();
+        const waitingRepo = allRepos.find(r => r.deploymentStatus === 'WAITING_JIT_ACCOUNT');
 
-            let targetRepo = null;
-            if (pendingRepos && pendingRepos.length > 0) {
-                targetRepo = pendingRepos[0].repo_name;
-            } else {
-                // If all are deployed, check if any repository exists
-                const anyRepo = await queryD1("SELECT repo_name FROM repo_deployments ORDER BY created_at DESC LIMIT 1;").catch(() => []);
-                if (anyRepo && anyRepo.length > 0) {
-                    targetRepo = anyRepo[0].repo_name;
-                }
-            }
+        let deployedRepo = null;
+        if (waitingRepo) {
+            try {
+                // Auto-deploy the waiting repo onto this fresh account
+                const project = await createRailwayProject(newAccount.apiToken, waitingRepo.repoName);
+                const service = await createRailwayService(newAccount.apiToken, project.projectId, waitingRepo.repoName, waitingRepo.repoName);
 
-            if (targetRepo) {
-                console.log(`🚀 [Webhook Auto-Deploy] Provisioning repo "${targetRepo}" using newly harvested token...`);
-                const deployResult = await deployRepositoryToRailway({
-                    apiToken,
-                    repoName: targetRepo
+                // Fetch linked envs
+                const { variables } = await getRepoEnvVariables(waitingRepo.repoId);
+                await setRailwayVariables(
+                    newAccount.apiToken,
+                    project.projectId,
+                    project.environmentId,
+                    service.id,
+                    variables
+                );
+
+                await triggerRailwayDeploy(newAccount.apiToken, service.id, project.environmentId);
+
+                await updateRepositoryDeployment(waitingRepo.repoId, {
+                    assignedAccountId: newAccount.accountId,
+                    railwayProjectId: project.projectId,
+                    railwayServiceId: service.id,
+                    deploymentStatus: 'BUILDING',
+                    liveUrl: `https://${service.name}-production.up.railway.app`
                 });
 
-                // Link account_id to this deployment in D1
-                await queryD1(
-                    "UPDATE repo_deployments SET account_id = ? WHERE repo_name = ?;",
-                    [newAccount.accountId, targetRepo]
-                ).catch(() => {});
-
-                await queryD1(
-                    "UPDATE railway_accounts SET repos_count = repos_count + 1 WHERE account_id = ?;",
-                    [newAccount.accountId]
-                ).catch(() => {});
-
-                deployedRepoName = targetRepo;
+                await updateAccountProjectsCount(newAccount.accountId, 1);
+                deployedRepo = waitingRepo.repoId;
 
                 await createLog({
                     type: 'JIT_AUTO_DEPLOYED',
-                    message: `Successfully auto-deployed ${targetRepo} onto Railway (${newAccount.accountId}) with ${deployResult.injectedEnvCount} envs`,
-                    metadata: { repoName: targetRepo, accountId: newAccount.accountId, liveUrl: deployResult.liveUrl }
-                }).catch(() => {});
+                    message: `Auto-deployed waiting repo ${waitingRepo.repoName} onto fresh account ${newAccount.accountId}`,
+                    metadata: { repoId: waitingRepo.repoId, accountId: newAccount.accountId }
+                });
+            } catch (deployErr) {
+                console.error('Error deploying waiting repo:', deployErr.message);
             }
-        } catch (deployErr) {
-            console.error('❌ [Railway Auto-Deploy Notice]:', deployErr.message);
         }
 
         return NextResponse.json({
             success: true,
             account: newAccount.accountId,
-            email: newAccount.email,
-            deployedRepo: deployedRepoName
+            deployedWaitingRepo: deployedRepo
         });
     } catch (e) {
         console.error('POST /api/webhooks/account-ready error:', e.message);

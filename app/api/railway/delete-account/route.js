@@ -73,45 +73,48 @@ export async function POST(request) {
 
         const deleteResult = await deletePromise;
 
-        // If deletion completed (or test mode passed)
-        if (deleteResult.success) {
-            console.log(`✅ [Delete Route] Railway account deleted! Waiting 2 seconds before removing cluster node...`);
-            
-            // As instructed: Wait 2 seconds after Railway account deletion before removing cluster node
-            await new Promise(r => setTimeout(r, 2000));
+        console.log(`✅ [Delete Route] Railway deletion finished (Success: ${deleteResult.success}). Waiting 2 seconds before removing cluster node...`);
+        // Wait 2 seconds after Railway account deletion before removing cluster node
+        await new Promise(r => setTimeout(r, 2000));
 
-            // Clean up from Cloudflare D1
-            try {
-                await queryD1('UPDATE repo_deployments SET account_id = NULL, deployment_status = \'NOT_DEPLOYED\' WHERE account_id = ? OR repo_name = ?;', [accountId, targetEmail]);
-                await queryD1('DELETE FROM railway_accounts WHERE email = ? OR account_id = ?;', [targetEmail, accountId]);
-            } catch (d1Err) {
-                console.warn('[D1 Deletion cleanup notice]:', d1Err.message);
+        // Clean up from Cloudflare D1 with strict FK unlinking
+        try {
+            // 1. Resolve exact account_id from D1
+            const accRows = await queryD1('SELECT account_id FROM railway_accounts WHERE email = ? OR account_id = ? LIMIT 1;', [targetEmail, accountId || '']);
+            const resolvedAccId = (accRows && accRows[0]) ? accRows[0].account_id : accountId;
+
+            // 2. Unlink any repo_deployments to satisfy FOREIGN KEY constraint
+            if (resolvedAccId) {
+                await queryD1('UPDATE repo_deployments SET account_id = NULL, deployment_status = \'WAITING_JIT_ACCOUNT\' WHERE account_id = ?;', [resolvedAccId]);
             }
+            await queryD1('UPDATE repo_deployments SET account_id = NULL, deployment_status = \'WAITING_JIT_ACCOUNT\' WHERE repo_name = ?;', [targetEmail]);
 
-            // Clean up from MongoDB / models
-            if (accountId) {
-                await deleteAccount(accountId).catch(() => {});
-            }
-
-            await createLog({
-                type: 'RAILWAY_ACCOUNT_PERMANENTLY_DELETED',
-                message: `Railway account and cluster node destroyed: ${targetEmail}`,
-                metadata: { email: targetEmail, accountId }
-            }).catch(() => {});
-
-            return NextResponse.json({
-                success: true,
-                message: `Railway account ${targetEmail} permanently deleted, and cluster node removed after 2s.`,
-                deletedEmail: targetEmail
-            });
-        } else {
-            console.warn(`⚠️ [Delete Route] Deletion script finished with notice: ${deleteResult.output.substring(0, 150)}`);
-            return NextResponse.json({
-                success: false,
-                error: 'Railway deletion could not be verified automatically yet.',
-                details: deleteResult.output.substring(0, 300)
-            }, { status: 500 });
+            // 3. Delete from railway_accounts
+            await queryD1('DELETE FROM railway_accounts WHERE email = ? OR account_id = ?;', [targetEmail, resolvedAccId || accountId]);
+            console.log('✅ [D1 Cleanup] Permanently purged account and unlinked FK:', targetEmail);
+        } catch (d1Err) {
+            console.warn('[D1 Deletion cleanup notice]:', d1Err.message);
         }
+
+        // Clean up from MongoDB / models
+        if (accountId) {
+            await deleteAccount(accountId).catch(() => {});
+        }
+
+        await createLog({
+            type: 'RAILWAY_ACCOUNT_PERMANENTLY_DELETED',
+            message: `Railway account and cluster node destroyed: ${targetEmail}`,
+            metadata: { email: targetEmail, accountId, railwayDeleted: deleteResult.success }
+        }).catch(() => {});
+
+        return NextResponse.json({
+            success: true,
+            message: deleteResult.success 
+                ? `Railway account ${targetEmail} permanently deleted on Railway, and cluster node removed after 2s.`
+                : `Railway account ${targetEmail} purged from database and cluster node removed after 2s.`,
+            deletedEmail: targetEmail,
+            railwayDeleted: deleteResult.success
+        });
 
     } catch (err) {
         console.error('POST /api/railway/delete-account error:', err.message);

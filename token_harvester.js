@@ -24,14 +24,26 @@ async function harvestRailwayApiToken(page, maxWaitMs = 25000, desiredTokenName 
     const tokenName = desiredTokenName || `megaserver-fleet-${Date.now().toString(36)}`;
     console.log(`🔍 [Token Harvester] Harvesting token with name: "${tokenName}"`);
     let interceptedToken = null;
+    let capturedAuthHeader = null;
 
-    // Layer 1: Network Listener for Backboard GraphQL API response
+    // Layer 1: Network Listener for Backboard GraphQL API request & response
+    const requestHandler = (req) => {
+        try {
+            const url = req.url();
+            if (url.includes('backboard.railway.com') || url.includes('/graphql') || url.includes('railway.com')) {
+                const headers = req.headers();
+                if (headers['authorization'] && headers['authorization'].startsWith('Bearer ')) {
+                    capturedAuthHeader = headers['authorization'];
+                }
+            }
+        } catch (e) {}
+    };
+
     const responseHandler = async (response) => {
         try {
             const url = response.url();
             if (url.includes('backboard') || url.includes('graphql') || url.includes('/api/')) {
                 const text = await response.text();
-                // Check if response contains an API token creation result
                 if (text.includes('apiToken') || text.includes('token') || text.includes('Create')) {
                     const match = text.match(UUID_REGEX);
                     if (match && !interceptedToken) {
@@ -43,6 +55,7 @@ async function harvestRailwayApiToken(page, maxWaitMs = 25000, desiredTokenName 
         } catch (e) {}
     };
 
+    page.on('request', requestHandler);
     page.on('response', responseHandler);
 
     try {
@@ -59,47 +72,92 @@ async function harvestRailwayApiToken(page, maxWaitMs = 25000, desiredTokenName 
 
         await new Promise(r => setTimeout(r, 2000));
 
-        // Auto-clear Railway Terms of Service if modal is blocking
-        await handleRailwayTermsOfService(page);
+        console.log(`🧭 [Token Harvester] Current URL after navigating to tokens: ${page.url()}`);
+        await handleRailwayTermsOfService(page).catch(() => {});
 
-        // Layer 2: Fill Token Name in "New Token" section
-        console.log(`📝 [Token Harvester] Locating "API Token" name input...`);
+        // Layer 1: Direct Session GraphQL apiTokenCreate Mutation
+        console.log(`⚡ [Token Harvester] Generating API token "${tokenName}" via direct session GraphQL...`);
+        try {
+            const directResult = await page.evaluate(async ({ name, authHeader }) => {
+                try {
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (authHeader) headers['Authorization'] = authHeader;
+                    const res = await fetch('https://backboard.railway.com/graphql/v2', {
+                        method: 'POST',
+                        headers,
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            query: 'mutation CreateApiToken($input: ApiTokenCreateInput!) { apiTokenCreate(input: $input) }',
+                            variables: { input: { name } }
+                        })
+                    });
+                    return await res.json();
+                } catch (e) {
+                    return { error: e.message };
+                }
+            }, { name: tokenName, authHeader: capturedAuthHeader });
+
+            console.log('📡 [Token Harvester] directResult:', JSON.stringify(directResult));
+
+            const directToken = directResult?.data?.apiTokenCreate;
+            if (directToken && directToken.length > 10) {
+                console.log(`🎉 [Token Harvester] Direct session GraphQL apiTokenCreate succeeded: ${directToken}`);
+                return {
+                    token: directToken,
+                    tokenName: tokenName,
+                    harvestedAt: new Date().toISOString()
+                };
+            }
+        } catch (directErr) {
+            console.warn('Direct GraphQL token generation notice:', directErr.message);
+        }
+
+        // Layer 2: UI Interaction fallback
+        console.log('📝 [Token Harvester] Checking for "Create a Token" button or "API Token" input...');
+        await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button, a'));
+            const trigger = btns.find(b => {
+                const t = (b.innerText || b.textContent || '').trim().toLowerCase();
+                return t === 'create a token' || t === 'create token' || t === 'new token' || t === 'create api token' || t.includes('add token');
+            });
+            if (trigger) trigger.click();
+        }).catch(() => {});
+        await new Promise(r => setTimeout(r, 1000));
+
         let nameFilled = false;
         try {
-            // Find input with placeholder "API Token"
-            const nameInput = page.locator('input[placeholder="API Token"], input[placeholder*="Token" i], input[type="text"]').first();
-            await nameInput.waitFor({ state: 'visible', timeout: 12000 });
-            await nameInput.click();
-            await nameInput.fill(tokenName);
-            nameFilled = true;
-            console.log(`✅ [Token Harvester] Typed token name: "${tokenName}"`);
-            await new Promise(r => setTimeout(r, 500));
+            const nameInput = page.locator('input[placeholder="API Token"], input[placeholder*="Token" i], input[placeholder*="Name" i], input[type="text"]').first();
+            if (await nameInput.isVisible({ timeout: 6000 }).catch(() => false)) {
+                await nameInput.click();
+                await nameInput.fill(tokenName);
+                nameFilled = true;
+                console.log(`✅ [Token Harvester] Typed token name: "${tokenName}"`);
+                await new Promise(r => setTimeout(r, 500));
+
+                console.log('🖱️ [Token Harvester] Clicking "Create" button...');
+                const createClicked = await page.evaluate(() => {
+                    const btns = Array.from(document.querySelectorAll('button'));
+                    const createBtn = btns.find(b => {
+                        const text = (b.innerText || b.textContent || '').trim().toLowerCase();
+                        return text === 'create' || text === 'create token' || text === 'generate';
+                    });
+                    if (createBtn) {
+                        createBtn.click();
+                        return true;
+                    }
+                    return false;
+                }).catch(() => false);
+
+                if (!createClicked) {
+                    const pBtn = page.locator('button:has-text("Create")').first();
+                    await pBtn.click().catch(() => {});
+                }
+            }
         } catch (inputErr) {
             console.warn('⚠️ Input locate note:', inputErr.message);
         }
 
-        // Layer 3: Click "Create" button
-        console.log('🖱️ [Token Harvester] Clicking "Create" button...');
-        const createClicked = await page.evaluate(() => {
-            const btns = Array.from(document.querySelectorAll('button'));
-            const createBtn = btns.find(b => {
-                const text = (b.innerText || b.textContent || '').trim().toLowerCase();
-                return text === 'create' || text === 'create token';
-            });
-            if (createBtn) {
-                createBtn.click();
-                return true;
-            }
-            return false;
-        }).catch(() => false);
-
-        if (!createClicked) {
-            // Fallback via Playwright locator
-            const pBtn = page.locator('button:has-text("Create")').first();
-            await pBtn.click().catch(() => {});
-        }
-
-        // Layer 4: Wait for the Token display box ("We will only show this token once")
+        // Layer 4: Wait for the Token display box
         console.log('⏳ [Token Harvester] Waiting for token generation modal...');
         await new Promise(r => setTimeout(r, 1500));
 
@@ -107,7 +165,6 @@ async function harvestRailwayApiToken(page, maxWaitMs = 25000, desiredTokenName 
         while (Date.now() - startTime < maxWaitMs) {
             if (interceptedToken) break;
 
-            // Scan DOM for UUID inside the modal or page
             const domToken = await page.evaluate((uuidPattern) => {
                 const regex = new RegExp(uuidPattern, 'i');
                 const elements = Array.from(document.querySelectorAll('div, span, code, pre, p, input'));
@@ -130,7 +187,7 @@ async function harvestRailwayApiToken(page, maxWaitMs = 25000, desiredTokenName 
             await new Promise(r => setTimeout(r, 800));
         }
 
-        // Layer 5: Click "Got it" button to dismiss the modal
+        // Layer 5: Click "Got it" button
         try {
             const gotItBtn = page.locator('button:has-text("Got it")').first();
             if (await gotItBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -149,13 +206,11 @@ async function harvestRailwayApiToken(page, maxWaitMs = 25000, desiredTokenName 
             harvestedAt: new Date().toISOString()
         };
     } finally {
+        page.off('request', requestHandler);
         page.off('response', responseHandler);
     }
 }
 
-/**
- * Automates navigating to Railway Account settings and deleting the current account.
- */
 async function deleteCurrentRailwayAccount(page, email) {
     if (!page || page.isClosed()) throw new Error('Active page required for account deletion');
     if (!email) throw new Error('Account email is required for deletion confirmation');

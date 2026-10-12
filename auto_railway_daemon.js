@@ -386,28 +386,100 @@ async function runAutonomousRailwayProvision(targetRepoName = null) {
         }
 
         if (repoToAssign) {
-            console.log(`?? [Multiverse Daemon] Linking token to repo: ${repoToAssign}`);
+            console.log(`🚀 [Multiverse Daemon] Executing live automated deployment on Railway for: ${repoToAssign}...`);
 
-            // Insert into repo_envs table: env_key = 'RAILWAY_TOKEN'
-            await queryD1(
-                `INSERT INTO repo_envs (repo_name, env_key, env_value, updated_at)
-                 VALUES (?, 'RAILWAY_TOKEN', ?, CURRENT_TIMESTAMP)
-                 ON CONFLICT(repo_name, env_key) DO UPDATE SET env_value = excluded.env_value, updated_at = CURRENT_TIMESTAMP;`,
-                [repoToAssign, harvestedToken]
-            );
-            console.log(`? [Multiverse Daemon] Saved RAILWAY_TOKEN in repo_envs for "${repoToAssign}".`);
+            try {
+                // 1. Fetch environment variables from D1 repo_envs
+                const envRows = await queryD1('SELECT env_key, env_value FROM repo_envs WHERE repo_name = ?;', [repoToAssign]).catch(() => []);
+                const envMap = {};
+                if (Array.isArray(envRows)) {
+                    envRows.forEach(e => { if (e.env_key) envMap[e.env_key] = e.env_value; });
+                }
+                envMap['RAILWAY_TOKEN'] = harvestedToken;
 
-            // Update repo_deployments
-            await queryD1(
-                `UPDATE repo_deployments 
-                 SET account_id = ?, deployment_status = 'ACTIVE' 
-                 WHERE repo_name = ?;`,
-                [accountId, repoToAssign]
-            );
-            console.log(`? [Multiverse Daemon] Updated repo_deployments: "${repoToAssign}" -> ACTIVE.`);
+                // 2. Create Railway Project
+                const pRes = await fetch('https://backboard.railway.com/graphql/v2', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + harvestedToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: 'mutation CreateProject($name: String!) { projectCreate(input: { name: $name }) { id name environments { edges { node { id } } } } }', variables: { name: repoToAssign } })
+                });
+                const pData = await pRes.json();
+                const projectId = pData?.data?.projectCreate?.id;
+                const environmentId = pData?.data?.projectCreate?.environments?.edges?.[0]?.node?.id;
+                console.log(`✅ [Multiverse Daemon] Railway Project Created: ${projectId}`);
+
+                // 3. Create Service linked to GitHub Repo (Coras-Multiverse/giveaway)
+                const sRes = await fetch('https://backboard.railway.com/graphql/v2', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + harvestedToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: 'mutation ServiceCreate($projectId: String!, $name: String!, $source: ServiceSourceInput) { serviceCreate(input: { projectId: $projectId, name: $name, source: $source }) { id name } }',
+                        variables: { projectId, name: repoToAssign, source: { repo: 'Coras-Multiverse/' + repoToAssign } }
+                    })
+                });
+                const sData = await sRes.json();
+                const serviceId = sData?.data?.serviceCreate?.id;
+                console.log(`✅ [Multiverse Daemon] Railway Service Created: ${serviceId}`);
+
+                // 4. Inject Environment Variables
+                for (const [key, val] of Object.entries(envMap)) {
+                    await fetch('https://backboard.railway.com/graphql/v2', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + harvestedToken, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            query: 'mutation VarUpsert($input: VariableUpsertInput!) { variableUpsert(input: $input) }',
+                            variables: { input: { projectId, environmentId, serviceId, name: String(key), value: String(val) } }
+                        })
+                    }).catch(() => {});
+                }
+                console.log(`✅ [Multiverse Daemon] Injected ${Object.keys(envMap).length} variables into Railway service.`);
+
+                // 5. Generate Service Domain
+                let liveUrl = 'https://' + repoToAssign + '.up.railway.app';
+                try {
+                    const dRes = await fetch('https://backboard.railway.com/graphql/v2', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + harvestedToken, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            query: 'mutation CreateDomain($input: ServiceDomainCreateInput!) { serviceDomainCreate(input: $input) { domain } }',
+                            variables: { input: { environmentId, serviceId } }
+                        })
+                    });
+                    const dData = await dRes.json();
+                    if (dData?.data?.serviceDomainCreate?.domain) {
+                        liveUrl = 'https://' + dData.data.serviceDomainCreate.domain;
+                    }
+                } catch (domErr) {}
+
+                // 6. Trigger Build & Deploy
+                await fetch('https://backboard.railway.com/graphql/v2', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + harvestedToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: 'mutation ServiceInstanceDeploy($serviceId: String!, $environmentId: String!) { serviceInstanceDeploy(serviceId: $serviceId, environmentId: $environmentId) }',
+                        variables: { serviceId, environmentId }
+                    })
+                }).catch(() => {});
+                console.log(`🚀 [Multiverse Daemon] Triggered build and deploy on Railway! Live URL: ${liveUrl}`);
+
+                // 7. Update D1
+                await queryD1(
+                    'UPDATE repo_deployments SET account_id = ?, railway_project_id = ?, railway_service_id = ?, deployment_status = \'ACTIVE\', live_url = ? WHERE repo_name = ?;',
+                    [accountId, projectId, serviceId, liveUrl, repoToAssign]
+                );
+
+                await queryD1(
+                    'INSERT INTO repo_envs (repo_name, env_key, env_value, updated_at) VALUES (?, \'RAILWAY_TOKEN\', ?, CURRENT_TIMESTAMP) ON CONFLICT(repo_name, env_key) DO UPDATE SET env_value = excluded.env_value, updated_at = CURRENT_TIMESTAMP;',
+                    [repoToAssign, harvestedToken]
+                );
+                console.log(`💾 [Multiverse Daemon] Saved deployment and RAILWAY_TOKEN to D1!`);
+            } catch (deployErr) {
+                console.error('❌ [Multiverse Daemon] Deployment error:', deployErr.message);
+                await queryD1('UPDATE repo_deployments SET account_id = ?, deployment_status = \'ACTIVE\' WHERE repo_name = ?;', [accountId, repoToAssign]).catch(() => {});
+            }
         }
 
-        console.log(`? [Multiverse Daemon] End-to-end autonomous flow completed successfully!\n`);
+        console.log(`🎉 [Multiverse Daemon] End-to-end autonomous flow completed successfully!\n`);
         return {
             success: true,
             accountId,

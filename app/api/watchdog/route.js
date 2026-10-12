@@ -45,34 +45,39 @@ export async function GET() {
             }
         }
 
-        // 2. Identify low credit accounts (<= $2.00)
-        const migrationCandidates = identifyAccountsForMigration(accounts);
+        // 2. Scan D1 & fleet for low credit (<= $2.00) or expiring (<= 1 day) accounts
         const migrationLogs = [];
+        try {
+            const { getD1RailwayAccounts, queryD1 } = await import('@/lib/d1');
+            const d1Accounts = await getD1RailwayAccounts().catch(() => []);
+            const { executeAutonomousFailover } = await import('@/lib/migration');
 
-        for (const candidate of migrationCandidates) {
-            const lowAccount = candidate.account;
-            // Find an eligible target account with open slot (< 2 repos) and > $2 credit
-            const eligibleTarget = accounts.find(
-                a => a.accountId !== lowAccount.accountId && (a.activeProjectsCount || 0) < 2 && Number(a.remainingCredits) > 2.0
-            );
+            for (const acc of d1Accounts) {
+                const credits = Number(acc.credits_remaining !== undefined ? acc.credits_remaining : 5.0);
+                const daysLeft = Number(acc.days_left !== undefined ? acc.days_left : 30);
 
-            if (eligibleTarget) {
-                const reposToMigrate = repos.filter(r => r.assignedAccountId === lowAccount.accountId);
-                for (const r of reposToMigrate) {
-                    try {
-                        await migrateRepoToNewAccount(r, eligibleTarget);
-                        migrationLogs.push({ repo: r.repoName, to: eligibleTarget.accountId, status: 'MIGRATED' });
-                    } catch (migErr) {
-                        migrationLogs.push({ repo: r.repoName, error: migErr.message });
+                if (credits <= 2.0 || daysLeft <= 1) {
+                    console.log(`⚠️ [Watchdog Alert] Account ${acc.email} reached threshold: $${credits.toFixed(2)}, ${daysLeft}d left.`);
+                    
+                    // Find all repos deployed on this low-credit account
+                    const boundRepos = await queryD1('SELECT repo_name FROM repo_deployments WHERE account_id = ?;', [acc.account_id]).catch(() => []);
+                    
+                    for (const repoRow of boundRepos) {
+                        try {
+                            const res = await executeAutonomousFailover({
+                                repoName: repoRow.repo_name,
+                                oldAccountId: acc.account_id,
+                                oldEmail: acc.email
+                            });
+                            migrationLogs.push({ repo: repoRow.repo_name, status: 'MIGRATED', details: res });
+                        } catch (migErr) {
+                            migrationLogs.push({ repo: repoRow.repo_name, error: migErr.message });
+                        }
                     }
                 }
-            } else {
-                await createLog({
-                    type: 'MIGRATION_PENDING_JIT',
-                    message: `Account ${lowAccount.accountId} is <= $2.00 but no target account has free slots. JIT generation needed.`,
-                    metadata: { accountId: lowAccount.accountId }
-                });
             }
+        } catch (d1ScanErr) {
+            console.warn('[Watchdog D1 scan notice]:', d1ScanErr.message);
         }
 
         return NextResponse.json({

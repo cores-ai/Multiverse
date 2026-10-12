@@ -71,7 +71,7 @@ button { font-family: inherit; }
   flex-direction: column;
   justify-content: space-between;
   padding: 22px 16px 42px;
-  z-index: 100;
+  z-index: 9999;
   box-shadow: 10px 0 35px rgba(0, 0, 0, 0.7);
   transform: translateX(0);
   transition: transform 0.28s cubic-bezier(0.25, 0.1, 0.25, 1);
@@ -91,7 +91,7 @@ button { font-family: inherit; }
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
-  z-index: 90;
+  z-index: 9998;
   animation: fadeInBackdrop 0.2s ease forwards;
 }
 
