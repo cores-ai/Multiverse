@@ -47,8 +47,11 @@ export default function CurvedClusterScreen({
   // Temp mail is only displayed when a cluster is actually being provisioned / active
   const clusterEmail = currentAccount?.email || currentAccount?.clusterName || '';
 
-  // Auto-poll OTP directly in real-time whenever an active cluster email is present
+  const isAccountVerified = currentAccount && (currentAccount.status === 'active' || currentAccount.status === 'ACTIVE' || (accounts || []).some(a => a.email === clusterEmail));
+
+  // Auto-poll OTP directly in real-time only when NOT already verified
   useEffect(() => {
+    if (isAccountVerified) return;
     if (!clusterEmail) return;
     setOtp(null);
     let isCancelled = false;
