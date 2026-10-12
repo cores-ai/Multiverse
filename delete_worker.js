@@ -14,7 +14,7 @@ const fs = require('fs');
 const spoofConfig = require('./spoof_config');
 const { generateStealthScript } = require('./stealth_injections');
 const { handleRailwayTermsOfService, deleteCurrentRailwayAccount } = require('./token_harvester');
-const { fetchRawOtp, flushInbox } = require('./tempmail_client');
+const { fetchRawOtp } = require('./tempmail_client');
 
 async function runAutonomousDeletion(email, options = {}) {
     if (!email) {
@@ -28,7 +28,7 @@ async function runAutonomousDeletion(email, options = {}) {
     console.log(`🗑️ [Delete Worker] Starting autonomous Railway account deletion for: ${email}`);
 
     // Flush old stale messages from the inbox so old expired OTPs don't get picked up
-    await flushInbox(email).catch(() => {});
+    // inbox flush skipped
 
     const isHeadless = process.env.HEADLESS === 'true';
     const contextOptions = {
