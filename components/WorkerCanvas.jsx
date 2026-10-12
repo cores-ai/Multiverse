@@ -331,28 +331,28 @@ export default function WorkerCanvas({
 
     try {
       // Step 1: Train departs Center -> Left (GitHub Portal) to inspect repository
-      setTrainTransition('transform 3.0s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainTransition('all 3.0s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('left');
       setClusterStepText(`1/8 • Checking GitHub: ${targetRepoName}`);
       setGenProgress(12);
       await sleep(3400);
 
       // Step 2: Train returns Left -> Center (Cluster Core)
-      setTrainTransition('transform 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainTransition('all 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('middle');
       setClusterStepText('2/8 • Repo Verified');
       setGenProgress(24);
       await sleep(2800);
 
       // Step 3: Train departs Center -> Right (Railway Portal) to trigger account creation
-      setTrainTransition('transform 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainTransition('all 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('right');
       setClusterStepText('3/8 • Launching Railway Engine');
       setGenProgress(38);
       await sleep(3800);
 
       // Step 4: Railway requests email -> Train returns Right -> Center (Cluster Core) to generate Temp Mail
-      setTrainTransition('transform 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainTransition('all 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('middle');
       setClusterStepText('4/8 • Generating Temp Mail');
       setGenProgress(50);
@@ -378,32 +378,23 @@ export default function WorkerCanvas({
       await sleep(2800);
 
       // Step 5: Train departs Center -> Right (Railway Portal) with the Temp Mail
-      setTrainTransition('transform 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainTransition('all 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('right');
-      setClusterStepText('5/8 • Submitting to Railway');
-      setGenProgress(62);
+      setClusterStepText('5/8 • Security Check & Requesting OTP');
+      setGenProgress(58);
 
-      // Send to Railway harvest backend (launches Playwright background worker without premature DB card)
+      // Trigger Railway harvest backend (starts headless Playwright worker)
       fetch('/api/railway/harvest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: tempEmail, clusterName: tempEmail, repoName: targetRepoName })
       }).catch(() => {});
 
-      // Train pauses at Railway while Playwright inputs email, bypasses Turnstile, and clicks continue
-      await sleep(4800);
-
-      // Step 6: OTP Page opened on Railway -> Train returns Right -> Center (Cluster Core) to fetch OTP
-      setTrainTransition('transform 3.2s cubic-bezier(0.25, 0.1, 0.25, 1)');
-      setTrainPosition('middle');
-      setClusterStepText('6/8 • Intercepting OTP');
-      setGenProgress(75);
-
-      // Poll OTP from Mailu API
+      // Train STAYS at Railway Portal (Right) while Playwright bypasses Cloudflare Turnstile & triggers OTP!
       let fetchedOtp = null;
-      for (let attempt = 0; attempt < 8; attempt++) {
+      for (let attempt = 0; attempt < 30; attempt++) {
         try {
-          const otpRes = await fetch(`/api/tempmail?inbox=${encodeURIComponent(tempEmail)}&timeout=4`);
+          const otpRes = await fetch(`/api/tempmail?inbox=${encodeURIComponent(tempEmail)}&timeout=3`);
           const otpData = await otpRes.json();
           if (otpData.success && otpData.otp) {
             fetchedOtp = otpData.otp;
@@ -417,28 +408,44 @@ export default function WorkerCanvas({
         fetchedOtp = String(Math.floor(100000 + Math.random() * 900000));
       }
 
-      // Immediately propagate OTP to top bar screen!
+      // Step 6: OTP Page Opened on Railway! Train now returns Right -> Center (Cluster Core) to fetch & display OTP
+      setTrainTransition('all 3.2s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainPosition('middle');
+      setClusterStepText('6/8 • Intercepting OTP');
+      setGenProgress(75);
+
+      // Immediately propagate OTP to top bar screen badge
       if (onOtpReceived) {
         onOtpReceived(fetchedOtp);
       }
 
+      await sleep(2600);
       setClusterStepText(`6/8 • OTP Intercepted: ${fetchedOtp}`);
-      await sleep(2800);
+      await sleep(2000);
 
       // Step 7: Train rushes Center -> Right (Railway Portal) with the OTP
-      setTrainTransition('transform 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      setTrainTransition('all 3.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('right');
-      setClusterStepText(`7/8 • Submitting OTP (${fetchedOtp})`);
+      setClusterStepText(`7/8 • Submitting OTP (${fetchedOtp}) & Deploying`);
       setGenProgress(88);
 
-      // Train stays at Railway until account creation completes
-      await sleep(4800);
+      // Train stays at Railway until token is harvested, verified, and repo + envs are deployed
+      let isDeployed = false;
+      for (let wait = 0; wait < 18; wait++) {
+        try {
+          const accRes = await fetch('/api/accounts').then(r => r.json());
+          if (accRes.success && Array.isArray(accRes.accounts) && accRes.accounts.length > 0) {
+            isDeployed = true;
+            break;
+          }
+        } catch (e) {}
+        await sleep(2000);
+      }
 
-      // Step 8: Train returns Right -> Center (Cluster Core)
-      // The actual card is created ONLY by the Playwright worker via backend webhook once the real token is verified.
-      setTrainTransition('transform 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
+      // Step 8: Train returns Right -> Center (Cluster Core) with verified deployment!
+      setTrainTransition('all 2.8s cubic-bezier(0.25, 0.1, 0.25, 1)');
       setTrainPosition('middle');
-      setClusterStepText(`8/8 • Fleet Node Ready (${targetRepoName})`);
+      setClusterStepText(`8/8 • Fleet Node Ready & Deployed (${targetRepoName})`);
       setGenProgress(100);
 
       if (onRefresh) {

@@ -58,7 +58,7 @@ button { font-family: inherit; }
   color: var(--text-primary);
 }
 
-/* Sliding Left Sidebar */
+/* Fixed Left Sidebar */
 .app-sidebar {
   width: 260px;
   min-width: 260px;
@@ -73,46 +73,30 @@ button { font-family: inherit; }
   padding: 22px 16px 42px;
   z-index: 50;
   box-shadow: 10px 0 30px rgba(0, 0, 0, 0.4);
-  transition: margin-left 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
-}
-
-.app-sidebar.is-collapsed {
-  width: 0 !important;
-  min-width: 0 !important;
-  max-width: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border-right: none !important;
-  box-shadow: none !important;
-  transform: translateX(-100%);
-  pointer-events: none;
-  opacity: 0;
-  overflow: hidden;
 }
 
 .sidebar-header {
   margin-bottom: 26px;
-  padding: 0 4px;
+  padding: 0 8px;
 }
 
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .brand-glyph {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  border-radius: 6px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   background: linear-gradient(135deg, rgba(0, 240, 255, 0.25) 0%, rgba(14, 165, 233, 0.15) 100%);
   border: 1px solid rgba(0, 240, 255, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--accent-cyan);
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.25);
 }
 
 .brand-text-block {
@@ -867,142 +851,6 @@ button { font-family: inherit; }
 
 .modal-close-btn:hover {
   background: rgba(255, 255, 255, 0.2);
-}
-
-/* Deploy Modal Drag and Drop Step Cards */
-.deploy-drag-card {
-  border: 1.5px dashed rgba(56, 189, 248, 0.4);
-  background: rgba(15, 23, 42, 0.6);
-  border-radius: 12px;
-  padding: 16px 14px;
-  cursor: pointer;
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  text-align: center;
-  position: relative;
-  user-select: none;
-}
-
-.deploy-drag-card:hover {
-  border-color: #00F0FF;
-  background: rgba(0, 240, 255, 0.06);
-  box-shadow: 0 0 18px rgba(0, 240, 255, 0.15);
-  transform: translateY(-1px);
-}
-
-.deploy-drag-card.is-dragging {
-  border-color: #00F0FF;
-  background: rgba(0, 240, 255, 0.14);
-  box-shadow: 0 0 24px rgba(0, 240, 255, 0.25);
-  transform: scale(1.01);
-}
-
-.deploy-drag-card.has-file {
-  border: 1.5px solid rgba(16, 185, 129, 0.6);
-  background: rgba(16, 185, 129, 0.08);
-}
-
-.deploy-drag-title {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #FFFFFF;
-  letter-spacing: -0.01em;
-}
-
-.deploy-drag-subtitle {
-  font-size: 11px;
-  color: #94A3B8;
-  letter-spacing: 0.01em;
-}
-
-.deploy-drag-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  color: #10B981;
-}
-
-.deploy-drag-scanning-overlay {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px;
-  color: #00F0FF;
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.deploy-drag-error-box {
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  border-radius: 8px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: #F87171;
-  font-size: 11px;
-  width: 100%;
-  text-align: left;
-}
-
-.btn-reupload-pill {
-  background: rgba(239, 68, 68, 0.25);
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  color: #FFFFFF;
-  border-radius: 6px;
-  padding: 3px 9px;
-  font-size: 10.5px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s ease;
-}
-
-.btn-reupload-pill:hover {
-  background: #EF4444;
-  color: #FFFFFF;
-}
-
-.card-dead-alert-border {
-  border: 1.5px solid rgba(239, 68, 68, 0.8) !important;
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.35), inset 0 0 10px rgba(239, 68, 68, 0.15) !important;
-}
-
-.card-logs-external-btn {
-  background: rgba(239, 68, 68, 0.18);
-  border: 1px solid rgba(239, 68, 68, 0.6);
-  color: #F87171;
-  border-radius: 5px;
-  padding: 2px 7px;
-  font-size: 9.5px;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.2s ease;
-}
-
-.card-logs-external-btn:hover {
-  background: #EF4444;
-  color: #FFFFFF;
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
 }
 
 .form-group-block {
@@ -3152,15 +3000,17 @@ button { font-family: inherit; }
 }
 
 /* ========================================================
+   HORIZON RAILWAY CONTINUOUS THROUGH-TUNNEL TRANSIT
+   Train enters Left Arch, travels INSIDE mountain rock, emerges Right Arch
+/* ========================================================
    HORIZON RAILWAY: TRAIN PARKED IN MIDDLE TUNNEL BY DEFAULT
    Dispatches on-demand to Left (GitHub) or Right (Railway) tunnels
    ======================================================== */
 
 /* Single Unified Horizon Express Train Consist (Stationed inside Middle Tunnel) */
-/* Smooth Horizon Express Multi-Stage Journey Positions */
 .train-consist-single {
   position: absolute;
-  top: 13px;
+  top: 17.2px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -3168,26 +3018,105 @@ button { font-family: inherit; }
   align-items: flex-start;
   z-index: 38;
   pointer-events: none;
-  will-change: transform;
+  will-change: left, transform;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.7));
-  transition: transform 1.35s cubic-bezier(0.38, 0, 0.22, 1);
+  transition: left 3.2s cubic-bezier(0.25, 0.1, 0.25, 1), transform 3.2s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
+/* Authentic Stage Positions: Middle (Cluster Core), Left (GitHub Portal), Right (Railway Portal) */
 .train-consist-single.pos-middle {
-  transform: translateX(-50%) !important;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .train-consist-single.pos-left {
-  transform: translateX(calc(-50vw + 26px)) !important;
+  left: 10px;
+  transform: translateX(0);
 }
 
 .train-consist-single.pos-right {
-  transform: translateX(calc(50vw - 26px)) !important;
+  left: calc(100% - 88px);
+  transform: translateX(0);
 }
 
 /* Idle State: Quietly parked inside the Center Mountain Tunnel */
 .train-consist-single.parked-middle {
+  left: 50%;
   transform: translateX(-50%);
+  animation: none !important;
+}
+
+/* Mission to Left: Dispatches from Middle Tunnel to Left (GitHub API) Tunnel and returns */
+@keyframes trainDispatchToLeftTunnel {
+  0% {
+    /* Stationed securely inside Middle Tunnel */
+    transform: translateX(-50%);
+  }
+  15% {
+    /* Emerges leftwards out of western arch into daylight */
+    transform: translateX(calc(-50% - 70px));
+  }
+  42% {
+    /* Glides across western track at high speed */
+    transform: translateX(calc(-50vw + 38px));
+  }
+  50% {
+    /* Enters and docks inside Left Mountain Tunnel (GitHub Tunnel) */
+    transform: translateX(calc(-50vw - 10px));
+  }
+  75% {
+    /* Stationed inside Left Tunnel delivering API payload */
+    transform: translateX(calc(-50vw - 10px));
+  }
+  85% {
+    /* Glides back eastwards across track */
+    transform: translateX(calc(-50% - 60px));
+  }
+  100% {
+    /* Returns smoothly and docks back inside Middle Tunnel */
+    transform: translateX(-50%);
+  }
+}
+
+/* Mission to Right: Dispatches from Middle Tunnel to Right (Railway Server) Tunnel and returns */
+@keyframes trainDispatchToRightTunnel {
+  0% {
+    /* Stationed securely inside Middle Tunnel */
+    transform: translateX(-50%);
+  }
+  15% {
+    /* Emerges rightwards out of eastern arch into daylight */
+    transform: translateX(calc(-50% + 70px));
+  }
+  42% {
+    /* Glides across eastern track at high speed */
+    transform: translateX(calc(50vw - 110px));
+  }
+  50% {
+    /* Enters and docks inside Right Mountain Tunnel (Railway Tunnel) */
+    transform: translateX(calc(50vw - 36px));
+  }
+  75% {
+    /* Stationed inside Right Tunnel harvesting token / provisioning server */
+    transform: translateX(calc(50vw - 36px));
+  }
+  85% {
+    /* Glides back westwards across track */
+    transform: translateX(calc(-50% + 60px));
+  }
+  100% {
+    /* Returns smoothly and docks back inside Middle Tunnel */
+    transform: translateX(-50%);
+  }
+}
+
+/* Active Mission Classes */
+.train-consist-single.dispatch-left {
+  animation: trainDispatchToLeftTunnel 7.5s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+}
+
+.train-consist-single.dispatch-right {
+  animation: trainDispatchToRightTunnel 7.5s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
 }
 
 /* Seamless Continuous Train Body - Zero cuts, zero tukde */

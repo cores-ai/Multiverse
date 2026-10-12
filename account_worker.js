@@ -18,7 +18,7 @@ const MIDDLEMAN_WEBHOOK_URL = process.env.MIDDLEMAN_WEBHOOK_URL || 'http://local
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'mega-server-jit-worker-secret-2026';
 
 async function launchResilientBrowser() {
-    const isHeadless = process.env.HEADLESS === 'true';
+    const isHeadless = process.env.HEADLESS !== 'false';
     const chromePath = process.platform === 'darwin' 
         ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
         : 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
@@ -55,6 +55,170 @@ async function launchResilientBrowser() {
     });
 }
 
+async function loginWithEmailAndSubmitOtp(page, emailToUse) {
+    console.log(`🌐 [Account Worker] Navigating to Railway for email initiation (${emailToUse})...`);
+    await page.goto('https://railway.com', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(async () => {
+        await page.goto('https://railway.app', { waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => {});
+    });
+
+    await new Promise(r => setTimeout(r, 1500));
+
+    // Step 1: Click "Sign in"
+    console.log('🔍 [Account Worker] Finding and clicking "Sign in"...');
+    await page.evaluate(async () => {
+        for (let i = 0; i < 25; i++) {
+            const buttons = Array.from(document.querySelectorAll('button, a'));
+            const btn = buttons.find(b => {
+                const t = (b.innerText || b.textContent || '').trim().toLowerCase();
+                return t === 'sign in';
+            });
+            if (btn) { btn.click(); return true; }
+            await new Promise(r => setTimeout(r, 200));
+        }
+        return false;
+    }).catch(() => {});
+
+    await new Promise(r => setTimeout(r, 1200));
+
+    // Step 2: Click "Log in using email"
+    console.log('🔍 [Account Worker] Finding and clicking "Log in using email"...');
+    await page.evaluate(async () => {
+        for (let i = 0; i < 40; i++) {
+            const buttons = Array.from(document.querySelectorAll('button, a'));
+            const btn = buttons.find(b => {
+                const text = (b.innerText || b.textContent || '').trim().toLowerCase();
+                return text.includes('log in using email') || text.includes('login with email') || text.includes('using email');
+            });
+            if (btn) { btn.click(); return true; }
+            await new Promise(r => setTimeout(r, 300));
+        }
+        return false;
+    }).catch(() => {});
+
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Step 3: Fill email input
+    console.log(`⌨️ [Account Worker] Entering email address: ${emailToUse}...`);
+    try {
+        const emailInput = page.locator('input[type="email"], input[name="email"]').first();
+        await emailInput.waitFor({ state: 'visible', timeout: 12000 });
+        await emailInput.fill(emailToUse);
+        await new Promise(r => setTimeout(r, 500));
+
+        // Step 4: Handle Cloudflare Turnstile if present
+        console.log('🛡️ [Account Worker] Checking Cloudflare Turnstile...');
+        let turnstileBox = null;
+        for (let attempt = 0; attempt < 20; attempt++) {
+            turnstileBox = await page.evaluate(() => {
+                const input = document.querySelector('input[name="cf-turnstile-response"]');
+                if (input && input.parentElement) {
+                    const rect = input.parentElement.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+                    }
+                }
+                return null;
+            }).catch(() => null);
+
+            if (turnstileBox) break;
+            await new Promise(r => setTimeout(r, 400));
+        }
+
+        if (turnstileBox) {
+            console.log('⚡ [Account Worker] Turnstile detected. Emulating human click...');
+            const bx = turnstileBox;
+            const clickX = bx.x + 28;
+            const clickY = bx.y + (bx.height / 2);
+            await page.mouse.move(clickX, clickY, { steps: 8 });
+            await page.mouse.down();
+            await new Promise(r => setTimeout(r, 120));
+            await page.mouse.up();
+            await new Promise(r => setTimeout(r, 4000));
+        }
+
+        // Step 5: Click "Continue with email"
+        console.log('📨 [Account Worker] Clicking "Continue with email" to dispatch OTP...');
+        await page.evaluate(async () => {
+            for (let i = 0; i < 20; i++) {
+                const btn = Array.from(document.querySelectorAll('button')).find(b =>
+                    (b.innerText || '').trim().toLowerCase().includes('continue with email'));
+                if (btn && !btn.disabled) { btn.click(); return true; }
+                await new Promise(r => setTimeout(r, 400));
+            }
+            return false;
+        }).catch(() => {});
+
+        console.log(`⏳ [Account Worker] OTP requested from Railway! Polling disposable mailbox ${emailToUse}...`);
+
+        // Step 6: Poll for 6-digit OTP from Mailu.site
+        let receivedOtp = null;
+        try {
+            receivedOtp = await fetchRawOtp(emailToUse, 35);
+        } catch (otpErr) {
+            console.warn('⚠️ [Account Worker] OTP fetch warning:', otpErr.message);
+        }
+
+        if (receivedOtp && /^\d{6}$/.test(receivedOtp.trim())) {
+            const cleanOtp = receivedOtp.trim();
+            console.log(`🔑 [Account Worker] Successfully obtained OTP: ${cleanOtp}. Typing digits...`);
+
+            // Find PIN input
+            let firstInput = null;
+            let targetFrame = page;
+
+            for (let attempt = 0; attempt < 30; attempt++) {
+                const frames = [page, ...page.frames()];
+                for (const frame of frames) {
+                    try {
+                        if (await frame.locator('#pin-code-input-0').count() > 0) {
+                            firstInput = frame.locator('#pin-code-input-0').first();
+                            targetFrame = frame;
+                            break;
+                        }
+                    } catch (e) {}
+                }
+                if (firstInput) break;
+                await new Promise(r => setTimeout(r, 400));
+            }
+
+            if (firstInput) {
+                await firstInput.click();
+                for (let i = 0; i < 6; i++) {
+                    const input = targetFrame.locator(`#pin-code-input-${i}`);
+                    await input.click().catch(() => {});
+                    await input.fill(cleanOtp[i]).catch(() => {});
+                    await new Promise(r => setTimeout(r, 120));
+                }
+                console.log('✅ [Account Worker] Submitted all 6 OTP digits to Railway.');
+                await new Promise(r => setTimeout(r, 4000));
+
+                // Accept Terms of Service if modal displays
+                try {
+                    for (let attempt = 0; attempt < 10; attempt++) {
+                        const clickedTos = await page.evaluate(() => {
+                            const btns = Array.from(document.querySelectorAll('button'));
+                            const agreeBtn = btns.find(b => {
+                                const text = (b.innerText || b.textContent || '').toLowerCase();
+                                return (text.includes('i agree') || text.includes('accept')) && !b.disabled;
+                            });
+                            if (agreeBtn) { agreeBtn.click(); return true; }
+                            return false;
+                        }).catch(() => false);
+                        if (clickedTos) {
+                            console.log('📜 [Account Worker] Accepted Railway Terms of Service.');
+                            await new Promise(r => setTimeout(r, 1500));
+                        } else {
+                            break;
+                        }
+                    }
+                } catch (tosErr) {}
+            }
+        }
+    } catch (loginErr) {
+        console.warn('⚠️ [Account Worker] Login interaction notice:', loginErr.message);
+    }
+}
+
 async function generateAndHarvestAccount(customEmail = null) {
     console.log('🚀 [Account Worker] Initiating Just-In-Time Railway account generator with stealth spoofing...');
     
@@ -64,7 +228,7 @@ async function generateAndHarvestAccount(customEmail = null) {
         const [u, d] = emailToUse.split('@');
         emailToUse = `${(u || '').replace(/[_.]/g, '')}@${d || 'mailu.site'}`;
     }
-    console.log(`✉️ [Account Worker] Generated Clean Disposable Email: ${emailToUse}`);
+    console.log(`✉️ [Account Worker] Clean Disposable Email Target: ${emailToUse}`);
     
     const browser = await launchResilientBrowser();
 
@@ -77,22 +241,29 @@ async function generateAndHarvestAccount(customEmail = null) {
     const page = await context.newPage();
     await page.addInitScript(generateStealthScript(spoofConfig));
 
-    console.log(`🌐 [Account Worker] Browser session ready. Target account email: ${emailToUse}`);
+    console.log(`🌐 [Account Worker] Browser session ready. Executing full email + OTP auth for: ${emailToUse}`);
 
     try {
+        // Run full login + OTP flow
+        await loginWithEmailAndSubmitOtp(page, emailToUse);
+
         let harvestedApiToken = null;
         try {
             // Attempt live intercept on Railway tokens page
-            const harvestResult = await harvestRailwayApiToken(page);
+            const harvestResult = await harvestRailwayApiToken(page, 20000);
             harvestedApiToken = harvestResult.token;
         } catch (harvestErr) {
-            console.log('⚠️ [Account Worker] Live DOM harvest fallback:', harvestErr.message);
-            harvestedApiToken = process.env.NEW_HARVESTED_TOKEN || `rly_tok_live_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
+            console.error('❌ [Account Worker] Live token harvest failed:', harvestErr.message);
+        }
+
+        if (!harvestedApiToken) {
+            console.warn('⚠️ [Account Worker] No verified Railway token intercepted. Skipping account creation in database to prevent fake cards.');
+            return { success: false, reason: 'TOKEN_NOT_HARVESTED' };
         }
 
         console.log(`🔑 [Account Worker] Harvested token: ${harvestedApiToken.substring(0, 14)}...`);
 
-        // Dispatch token to Middleman Webhook
+        // Dispatch token to Middleman Webhook ONLY when real token is harvested!
         const resData = await dispatchTokenToMiddleman({
             email: emailToUse,
             apiToken: harvestedApiToken,
@@ -106,7 +277,7 @@ async function generateAndHarvestAccount(customEmail = null) {
         console.error('❌ [Account Worker] Error harvesting/dispatching account:', err.message);
         throw err;
     } finally {
-        await browser.close();
+        await browser.close().catch(() => {});
     }
 }
 

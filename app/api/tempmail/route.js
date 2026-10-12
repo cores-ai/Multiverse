@@ -8,18 +8,12 @@ import { createLog } from '@/lib/models';
  *  - /api/tempmail (generates a new unique inbox)
  *  - /api/tempmail?inbox=user@mailu.site&timeout=30 (fetches OTP)
  */
-import { getRemoteConfig } from '@/lib/d1';
-
 export async function GET(request) {
     try {
         const { searchParams } = new URL(request.url);
         const inbox = searchParams.get('inbox');
         const timeout = parseInt(searchParams.get('timeout') || '30', 10);
-        let apiKey = searchParams.get('api_key') || searchParams.get('apiKey');
-
-        if (!apiKey) {
-            apiKey = await getRemoteConfig('MAILU_API_KEY') || process.env.MAILU_API_KEY;
-        }
+        const apiKey = searchParams.get('api_key') || searchParams.get('apiKey');
 
         if (inbox) {
             // Fetch OTP for specified inbox
@@ -35,9 +29,8 @@ export async function GET(request) {
         }
 
         // Otherwise generate a new disposable email address
-        const d1Domain = await getRemoteConfig('MAILU_DOMAIN');
         const prefix = searchParams.get('prefix') || '';
-        const domain = searchParams.get('domain') || d1Domain || process.env.MAILU_DOMAIN || 'mailu.site';
+        const domain = searchParams.get('domain') || process.env.MAILU_DOMAIN || 'mailu.site';
         const newMail = generateTempEmail(prefix, domain);
 
         await createLog({
