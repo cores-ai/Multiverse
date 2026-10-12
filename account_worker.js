@@ -105,48 +105,65 @@ async function loginWithEmailAndSubmitOtp(page, emailToUse) {
         await emailInput.fill(emailToUse);
         await new Promise(r => setTimeout(r, 500));
 
-        // Step 4: Handle Cloudflare Turnstile if present
-        console.log('🛡️ [Account Worker] Checking Cloudflare Turnstile...');
-        let turnstileBox = null;
-        for (let attempt = 0; attempt < 20; attempt++) {
-            turnstileBox = await page.evaluate(() => {
+        // Step 4: Handle Cloudflare Turnstile & Wait for enabled submit button
+        console.log('🛡️ [Account Worker] Checking Cloudflare Turnstile and button readiness...');
+        let buttonEnabled = false;
+
+        for (let attempt = 0; attempt < 40; attempt++) {
+            const status = await page.evaluate(() => {
+                const btn = Array.from(document.querySelectorAll('button')).find(b =>
+                    (b.innerText || '').trim().toLowerCase().includes('continue with email'));
                 const input = document.querySelector('input[name="cf-turnstile-response"]');
+                const hasTurnstileToken = input && input.value && input.value.length > 20;
+                
+                let rect = null;
                 if (input && input.parentElement) {
-                    const rect = input.parentElement.getBoundingClientRect();
-                    if (rect.width > 0 && rect.height > 0) {
-                        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+                    const r = input.parentElement.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) {
+                        rect = { x: r.x, y: r.y, width: r.width, height: r.height };
                     }
                 }
-                return null;
-            }).catch(() => null);
 
-            if (turnstileBox) break;
-            await new Promise(r => setTimeout(r, 400));
-        }
+                return {
+                    isBtnEnabled: btn && !btn.disabled,
+                    hasTurnstileToken: !!hasTurnstileToken,
+                    turnstileBox: rect
+                };
+            }).catch(() => ({ isBtnEnabled: false }));
 
-        if (turnstileBox) {
-            console.log('⚡ [Account Worker] Turnstile detected. Emulating human click...');
-            const bx = turnstileBox;
-            const clickX = bx.x + 28;
-            const clickY = bx.y + (bx.height / 2);
-            await page.mouse.move(clickX, clickY, { steps: 8 });
-            await page.mouse.down();
-            await new Promise(r => setTimeout(r, 120));
-            await page.mouse.up();
-            await new Promise(r => setTimeout(r, 4000));
+            if (status.isBtnEnabled) {
+                buttonEnabled = true;
+                console.log('✅ [Account Worker] Submit button is enabled!');
+                break;
+            }
+
+            if (status.turnstileBox && attempt < 8) {
+                console.log('⚡ [Account Worker] Interacting with Cloudflare Turnstile...');
+                const bx = status.turnstileBox;
+                const clickX = bx.x + 28;
+                const clickY = bx.y + (bx.height / 2);
+                await page.mouse.move(clickX, clickY, { steps: 5 });
+                await page.mouse.click(clickX, clickY);
+            }
+
+            await new Promise(r => setTimeout(r, 800));
         }
 
         // Step 5: Click "Continue with email"
         console.log('📨 [Account Worker] Clicking "Continue with email" to dispatch OTP...');
-        await page.evaluate(async () => {
-            for (let i = 0; i < 20; i++) {
-                const btn = Array.from(document.querySelectorAll('button')).find(b =>
-                    (b.innerText || '').trim().toLowerCase().includes('continue with email'));
-                if (btn && !btn.disabled) { btn.click(); return true; }
-                await new Promise(r => setTimeout(r, 400));
+        const clickResult = await page.evaluate(async () => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b =>
+                (b.innerText || '').trim().toLowerCase().includes('continue with email'));
+            if (btn && !btn.disabled) {
+                btn.click();
+                return true;
             }
             return false;
-        }).catch(() => {});
+        }).catch(() => false);
+
+        if (!clickResult) {
+            console.warn('⚠️ [Account Worker] Warning: Submit button was still disabled after wait window.');
+        }
 
         console.log(`⏳ [Account Worker] OTP requested from Railway! Polling disposable mailbox ${emailToUse}...`);
 
