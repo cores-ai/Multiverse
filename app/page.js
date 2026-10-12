@@ -17,6 +17,18 @@ export default function OwnerManagementDashboard() {
   // Navigation & Accordion Sections
   const [activeModule, setActiveModule] = useState('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const sidebarRef = useRef(null);
+
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    const handleOutsideClick = (e) => {
+      if (sidebarRef.current && sidebarRef.current.contains(e.target)) return;
+      if (e.target.closest('.transparent-hamburger-btn')) return;
+      setIsSidebarOpen(false);
+    };
+    document.addEventListener('pointerdown', handleOutsideClick);
+    return () => document.removeEventListener('pointerdown', handleOutsideClick);
+  }, [isSidebarOpen]);
   const [openSections, setOpenSections] = useState({
     server: false,
     storage: false,
@@ -823,7 +835,8 @@ export default function OwnerManagementDashboard() {
       {/* ========================================================
           1. SLIDING LEFT SIDEBAR (Hideable on X click)
           ======================================================== */}
-      <aside 
+      <aside
+        ref={sidebarRef}
         className={`app-sidebar ${!isSidebarOpen ? 'is-collapsed' : ''}`}
       >
         <div className="sidebar-scrollable-content">
@@ -1130,7 +1143,7 @@ export default function OwnerManagementDashboard() {
       {/* ========================================================
           2. MAIN STAGE (Center & Right Area)
           ======================================================== */}
-      <main className="app-main">
+      <main className="app-main" onClick={() => { if (isSidebarOpen) setIsSidebarOpen(false); }}>
         {/* Sticky Top Header */}
         <header className="main-top-header">
           <div className="header-breadcrumbs" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -2222,7 +2235,7 @@ export default function OwnerManagementDashboard() {
             <div className="modal-header-row">
               <div className="modal-title-text">
                 <Play size={16} fill="var(--accent-cyan)" color="var(--accent-cyan)" />
-                <span>Deploy New VPS Instance</span>
+                <span>Deploy Instance</span>
               </div>
               <button className="modal-close-btn" onClick={() => setShowDeployModal(false)} title="Close Modal"><X size={16} /></button>
             </div>
@@ -2231,8 +2244,8 @@ export default function OwnerManagementDashboard() {
               {/* Top: Repository Name Field */}
               <div className="form-group-block" style={{ marginBottom: '14px' }}>
                 <label className="form-label-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Repository Name</span>
-                  <span style={{ fontSize: '10px', color: '#64748B', fontFamily: 'var(--font-mono)' }}>lowercase, hyphens only</span>
+                  <span>Repo Name</span>
+                  <span style={{ fontSize: '10px', color: '#64748B', fontFamily: 'var(--font-mono)' }}>a-z, 0-9, hyphens</span>
                 </label>
                 <input
                   type="text"
@@ -2248,7 +2261,7 @@ export default function OwnerManagementDashboard() {
               </div>
 
               {/* Step 1: Drag & Drop Repository Card */}
-              <div className="form-group-block" style={{ marginBottom: '14px' }}>
+              <div className="form-group-block" style={{ marginBottom: '12px' }}>
                 <input
                   type="file"
                   ref={repoFileInputRef}
@@ -2270,13 +2283,13 @@ export default function OwnerManagementDashboard() {
                 >
                   {isScanningRepo ? (
                     <div className="deploy-drag-scanning-overlay">
-                      <RefreshCw size={20} style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>Scanning repository for secret leaks...</span>
+                      <RefreshCw size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>Scanning repo...</span>
                     </div>
                   ) : repoScanError ? (
                     <div className="deploy-drag-error-box" onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <AlertTriangle size={16} color="#EF4444" style={{ flexShrink: 0 }} />
+                        <AlertTriangle size={15} color="#EF4444" style={{ flexShrink: 0 }} />
                         <span>{repoScanError}</span>
                       </div>
                       <button type="button" onClick={handleResetRepoFile} className="btn-reupload-pill">
@@ -2284,33 +2297,41 @@ export default function OwnerManagementDashboard() {
                       </button>
                     </div>
                   ) : (
-                    <>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <UploadCloud size={20} color={repoFile ? '#10B981' : '#00F0FF'} />
-                        <span className="deploy-drag-title">
-                          {repoFile ? 'Repository Attached' : '01. Upload Your Repo'}
-                        </span>
+                    <div className="deploy-card-inner">
+                      <div className="deploy-card-left">
+                        <div className={`deploy-icon-box ${repoFile ? 'is-success' : 'is-cyan'}`}>
+                          <UploadCloud size={18} />
+                        </div>
+                        <div className="deploy-text-col">
+                          <span className="deploy-drag-title">
+                            {repoFile ? 'Repo Attached' : 'Repo Archive (.zip)'}
+                          </span>
+                          <span className="deploy-drag-subtitle">
+                            {repoFile ? `${repoFile.name} • ${repoFile.size}` : 'Drop zip or browse'}
+                          </span>
+                        </div>
                       </div>
+
                       {repoFile ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div className="deploy-card-right" onClick={e => e.stopPropagation()}>
                           <div className="deploy-drag-badge">
                             <Check size={12} />
-                            <span>{repoFile.name} ({repoFile.size}{repoFile.filesCount ? ` - ${repoFile.filesCount} files` : ""})</span>
+                            <span>Ready</span>
                           </div>
-                          <button type="button" onClick={handleResetRepoFile} style={{ background: "transparent", border: "none", color: "#94A3B8", cursor: "pointer", display: "flex", alignItems: "center", padding: "2px" }} title="Remove / Replace File"><X size={13} /></button>
+                          <button type="button" onClick={handleResetRepoFile} className="deploy-remove-btn" title="Remove"><X size={12} /></button>
                         </div>
                       ) : (
-                        <span className="deploy-drag-subtitle">
-                          Drag & Drop repository archive (.zip, folder) or click to browse
-                        </span>
+                        <div className="deploy-card-right">
+                          <span className="deploy-action-tag">Browse</span>
+                        </div>
                       )}
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
 
               {/* Step 2: Drag & Drop Secrets / Env / Credentials Card */}
-              <div className="form-group-block" style={{ marginBottom: '18px' }}>
+              <div className="form-group-block" style={{ marginBottom: '16px' }}>
                 <input
                   type="file"
                   ref={envFileInputRef}
@@ -2332,13 +2353,13 @@ export default function OwnerManagementDashboard() {
                 >
                   {isScanningEnv ? (
                     <div className="deploy-drag-scanning-overlay">
-                      <RefreshCw size={20} style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>Validating environment keys...</span>
+                      <RefreshCw size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>Validating env...</span>
                     </div>
                   ) : envScanError ? (
                     <div className="deploy-drag-error-box" onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <AlertTriangle size={16} color="#EF4444" style={{ flexShrink: 0 }} />
+                        <AlertTriangle size={15} color="#EF4444" style={{ flexShrink: 0 }} />
                         <span>{envScanError}</span>
                       </div>
                       <button type="button" onClick={handleResetEnvFile} className="btn-reupload-pill">
@@ -2346,27 +2367,35 @@ export default function OwnerManagementDashboard() {
                       </button>
                     </div>
                   ) : (
-                    <>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Key size={18} color={envFile ? '#10B981' : '#38BDF8'} />
-                        <span className="deploy-drag-title">
-                          {envFile ? 'Secrets & Credentials Loaded' : '02. Upload Secrets / Env / Credentials'}
-                        </span>
+                    <div className="deploy-card-inner">
+                      <div className="deploy-card-left">
+                        <div className={`deploy-icon-box ${envFile ? 'is-success' : 'is-sky'}`}>
+                          <Key size={18} />
+                        </div>
+                        <div className="deploy-text-col">
+                          <span className="deploy-drag-title">
+                            {envFile ? 'Secrets Loaded' : 'Secrets (.env)'}
+                          </span>
+                          <span className="deploy-drag-subtitle">
+                            {envFile ? `${envFile.name} • ${envFile.keysCount} keys` : 'Drop .env or browse'}
+                          </span>
+                        </div>
                       </div>
+
                       {envFile ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div className="deploy-card-right" onClick={e => e.stopPropagation()}>
                           <div className="deploy-drag-badge">
                             <Check size={12} />
-                            <span>{envFile.name} ({envFile.keysCount} keys detected)</span>
+                            <span>Ready</span>
                           </div>
-                          <button type="button" onClick={handleResetEnvFile} style={{ background: "transparent", border: "none", color: "#94A3B8", cursor: "pointer", display: "flex", alignItems: "center", padding: "2px" }} title="Remove / Replace File"><X size={13} /></button>
+                          <button type="button" onClick={handleResetEnvFile} className="deploy-remove-btn" title="Remove"><X size={12} /></button>
                         </div>
                       ) : (
-                        <span className="deploy-drag-subtitle">
-                          Drag & Drop .env or credentials file or click to browse
-                        </span>
+                        <div className="deploy-card-right">
+                          <span className="deploy-action-tag">Browse</span>
+                        </div>
                       )}
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2376,7 +2405,7 @@ export default function OwnerManagementDashboard() {
                   Cancel
                 </button>
                 <button type="submit" className="btn-action-cyan" disabled={isSubmitting || isScanningRepo || isScanningEnv}>
-                  {isSubmitting ? 'Allocating Node & Deploying...' : 'Deploy to Active Node'}
+                  {isSubmitting ? 'Deploying...' : 'Deploy'}
                 </button>
               </div>
             </form>
