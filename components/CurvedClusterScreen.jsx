@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Copy, Check, RefreshCw, Key, ShieldCheck, Grid, Plus, Minus, UploadCloud } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Copy, Check, RefreshCw, Key, ShieldCheck, Grid, Plus, Minus, UploadCloud, Terminal, ChevronDown, Mail } from 'lucide-react';
 
 export default function CurvedClusterScreen({
   accounts = [],
@@ -27,6 +27,19 @@ export default function CurvedClusterScreen({
   const [copiedOtp, setCopiedOtp] = useState(false);
   const [copiedCluster, setCopiedCluster] = useState(false);
   const [autoInbox, setAutoInbox] = useState(null);
+  const [showLogsDropdown, setShowLogsDropdown] = useState(false);
+  const logsRef = useRef(null);
+
+  useEffect(() => {
+    if (!showLogsDropdown) return;
+    const handleOutsideLogs = (e) => {
+      if (logsRef.current && !logsRef.current.contains(e.target)) {
+        setShowLogsDropdown(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleOutsideLogs);
+    return () => document.removeEventListener('pointerdown', handleOutsideLogs);
+  }, [showLogsDropdown]);
 
   useEffect(() => {
     if (externalOtp) {
@@ -132,7 +145,9 @@ export default function CurvedClusterScreen({
         background: 'transparent',
         width: '100%',
         boxSizing: 'border-box',
-        flexShrink: 0
+        flexShrink: 0,
+        position: 'relative',
+        zIndex: 1000
       }}
     >
       <div 
@@ -151,7 +166,7 @@ export default function CurvedClusterScreen({
           justifyContent: 'space-between',
           padding: '0 16px',
           position: 'relative',
-          overflow: 'hidden'
+          overflow: 'visible'
         }}
       >
         {/* LEFT COLUMN: new cluster & cluster otp */}
@@ -382,8 +397,146 @@ export default function CurvedClusterScreen({
           </div>
         </div>
 
-        {/* RIGHT ACTIONS: Grid Toggle, Zoom In (+), Zoom Out (-) */}
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+        
+        {/* RIGHT ACTIONS: LOGS BUTTON SECTION & Grid / Zoom Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }} ref={logsRef}>
+          {/* 4th Pic Button Section: LOGS */}
+          <button
+            type="button"
+            onClick={() => setShowLogsDropdown(prev => !prev)}
+            title="View All Cluster Account Creation Logs"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: showLogsDropdown 
+                ? 'rgba(0, 240, 255, 0.22)' 
+                : 'linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(7, 13, 25, 0.95) 100%)',
+              border: showLogsDropdown ? '1px solid #00F0FF' : '1px solid rgba(56, 189, 248, 0.35)',
+              borderRadius: '6px',
+              color: '#00F0FF',
+              padding: '3px 9px',
+              fontFamily: 'var(--font-mono, monospace)',
+              fontSize: '11px',
+              fontWeight: 800,
+              letterSpacing: '0.04em',
+              cursor: 'pointer',
+              boxShadow: showLogsDropdown ? '0 0 12px rgba(0, 240, 255, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.4)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Terminal size={12} strokeWidth={2.4} />
+            <span>LOGS</span>
+            <span style={{
+              background: 'rgba(0, 240, 255, 0.15)',
+              border: '1px solid rgba(0, 240, 255, 0.35)',
+              borderRadius: '3px',
+              padding: '0 4px',
+              fontSize: '9.5px',
+              fontWeight: 800
+            }}>
+              {accounts.length < 10 ? `0${accounts.length}` : accounts.length}
+            </span>
+            <ChevronDown size={11} style={{ transform: showLogsDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
+          </button>
+
+          {/* LOGS DROPDOWN LIST (Shows cards of all mails with which railway accounts were created) */}
+          {showLogsDropdown && (
+            <div 
+              className="cluster-logs-dropdown-popover"
+              style={{
+                position: 'absolute',
+                top: '38px',
+                right: '0px',
+                width: '390px',
+                maxHeight: '420px',
+                background: 'rgba(9, 14, 26, 0.97)',
+                border: '1px solid rgba(0, 240, 255, 0.38)',
+                borderRadius: '10px',
+                boxShadow: '0 16px 45px rgba(0, 0, 0, 0.9), 0 0 25px rgba(0, 240, 255, 0.2)',
+                backdropFilter: 'blur(20px)',
+                zIndex: 99999,
+                overflowY: 'auto',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Terminal size={13} color="#00F0FF" />
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#fff', fontFamily: 'var(--font-mono)' }}>
+                    CLUSTER RAILWAY ACCOUNTS
+                  </span>
+                </div>
+                <span style={{ fontSize: '10px', color: '#94A3B8', fontFamily: 'var(--font-mono)' }}>
+                  {accounts.length} Total Mail Node{accounts.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              {/* List of Email Cards */}
+              {accounts.length === 0 ? (
+                <div style={{ padding: '24px 0', textAlign: 'center', color: '#64748B', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
+                  No cluster railway accounts created yet.
+                </div>
+              ) : (
+                accounts.map((acc, idx) => {
+                  const mail = acc.email || acc.clusterName || 'unknown@mailu.site';
+                  const isVerified = acc.status === 'active' || acc.status === 'ACTIVE';
+                  const deployedCount = acc.activeProjectsCount || (acc.repoName ? 1 : 0);
+                  return (
+                    <div
+                      key={acc.accountId || acc._id || idx}
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        border: '1px solid rgba(56, 189, 248, 0.25)',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {/* Row 1: Email and Status Pill */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isVerified ? '#10B981' : '#F59E0B', boxShadow: isVerified ? '0 0 6px #10B981' : '0 0 6px #F59E0B' }} />
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#00F0FF', fontFamily: 'var(--font-mono)' }}>
+                            {mail}
+                          </span>
+                        </div>
+                        <span style={{
+                          background: isVerified ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                          border: isVerified ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)',
+                          color: isVerified ? '#34D399' : '#FBBF24',
+                          fontSize: '9.5px',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          fontWeight: 700,
+                          fontFamily: 'var(--font-mono)'
+                        }}>
+                          ${(acc.remainingCredits || 5.0).toFixed(2)} • {isVerified ? 'ACTIVE' : 'STANDBY'}
+                        </span>
+                      </div>
+
+                      {/* Row 2: Metadata */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: '#94A3B8', fontFamily: 'var(--font-mono)' }}>
+                        <span>Projects: <b style={{ color: '#F1F5F9' }}>{deployedCount}/2 Repos</b></span>
+                        <span>{acc.createdAt ? new Date(acc.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now'}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center' }}>
           <div 
             style={{
               display: 'inline-flex',
@@ -464,6 +617,7 @@ export default function CurvedClusterScreen({
               <Minus size={14} strokeWidth={2.2} />
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>
